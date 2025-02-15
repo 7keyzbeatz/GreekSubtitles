@@ -20,35 +20,24 @@ function mainFunction(name) {
     }
 }
 
-// Function to handle HTTP request result
-// Function to handle HTTP request result
-function functionWithHTTPResult(result) {
+// Function to extract .m3u8 URL from a given string
+function extractM3U8Url(input) {
     try {
-        // Ensure we are working with a string and check if it contains ".m3u8"
-        var m3u8Url = result || null;
+        // Regular expression to match any .m3u8 URL within the string
+        var regex = /(https?:\/\/[^\s]+\.m3u8[^\s]*)/;
 
-        if (typeof m3u8Url !== 'string') {
-            return JSON.stringify({
-                Type: "Error",
-                Result: "Input is not a valid string"
-            });
-        }
+        // Apply the regex to the input string
+        var match = input.match(regex);
 
-        // Regular expression to match anything that starts with and contains .m3u8
-        var regex = /([a-zA-Z0-9._-]+\.m3u8[a-zA-Z0-9._-]*)/;
-
-        // Apply the regex to find the URL
-        var match = m3u8Url.match(regex);
-
-        // If a match is found, return the result
+        // If a match is found, return the m3u8 URL
         if (match && match[0]) {
             return JSON.stringify({
                 Type: "Direct",
-                Result: match[0]  // Return the matched portion
+                Result: match[0]  // Return the matched URL
             });
         }
-        
-        // If no match is found, indicate no valid .m3u8 URL
+
+        // If no valid .m3u8 URL is found
         return JSON.stringify({
             Type: "Error",
             Result: "No valid .m3u8 stream URL found"
@@ -56,7 +45,7 @@ function functionWithHTTPResult(result) {
     } catch (error) {
         return JSON.stringify({
             Type: "Error",
-            Result: "Invalid response format: " + error
+            Result: "Error processing input"
         });
     }
 }
