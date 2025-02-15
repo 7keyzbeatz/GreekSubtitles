@@ -59,7 +59,7 @@ function functionWithHTTPResult(result) {
     } catch (error) {
         return JSON.stringify({
             Type: "Error",
-            Result: "Invalid response format"
+            Result: "Invalid response format: " + error
         });
     }
 }
