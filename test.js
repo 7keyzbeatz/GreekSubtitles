@@ -23,10 +23,8 @@ function mainFunction(name) {
 // Function to handle HTTP request result
 function functionWithHTTPResult(result) {
     try {
-        var data = JSON.parse(result);
-
-        // Look for `.m3u8` URL in various common keys
-        var m3u8Url = data.m3u8 || data.hls || data.streamUrl || null;
+        // Directly check if the response contains the `.m3u8` URL
+        var m3u8Url = result || null;
 
         // If `.m3u8` URL is found, return it
         if (m3u8Url && m3u8Url.indexOf(".m3u8") !== -1) {
@@ -38,7 +36,7 @@ function functionWithHTTPResult(result) {
     } catch (error) {
         return JSON.stringify({
             Type: "Error",
-            Result: "Invalid JSON response"
+            Result: "Invalid response format"
         });
     }
 
