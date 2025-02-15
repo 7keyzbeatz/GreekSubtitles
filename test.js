@@ -6,7 +6,7 @@ const channelUrls = {
 };
 
 // Function to get the URL for a given channel name
-function function(name) {
+function mainFunction(name) {
     if (channelUrls[name]) {
         return JSON.stringify({
             Type: "HTTPRequestNeeded",
