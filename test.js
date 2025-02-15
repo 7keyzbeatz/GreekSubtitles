@@ -1,33 +1,19 @@
-// Function 1: Returning the URL based on name
+// First method: Get the dynamic URL based on the name
 function getUrlForName(name) {
-    // Define the mapping of names to URLs
-    const urlMappings = {
-        "skai": "https://www.skai.gr/tv/live",
-        "bbc": "https://www.bbc.com/live",
-        "cnn": "https://www.cnn.com/live"
-    };
-
-    // Get the dynamic URL for the name
-    const dynamicUrl = urlMappings[name.toLowerCase()];
-    
-    if (!dynamicUrl) {
-        return "No URL found for this name";  // Return an error if no matching URL
+    // Logic to return a URL based on the name (e.g., "skai")
+    if (name === "skai") {
+        return "https://www.skai.gr/tv/live";  // Example URL, based on the name
     }
-
-    return dynamicUrl;  // Return the matching URL
+    return "No URL found for this name";
 }
 
-// Function 2: Processing the HTML content passed from Android
-function extractM3u8UrlFromHtml(pageText) {
-    try {
-        var match = pageText.match(/(https?:\/\/[^"']+\.m3u8)/);
-        
-        if (match && match[1]) {
-            return match[1];  // Return the found m3u8 URL
-        } else {
-            return "No m3u8 URL found" + pageText;
-        }
-    } catch (error) {
-        return "Error: " + error.message;
+// Second method: Extract m3u8 URL from the HTML page content
+function extractM3u8UrlFromHtml(pageContent) {
+    // Use regular expressions to extract the m3u8 URL
+    const match = pageContent.match(/(https?:\/\/[^"']+\.m3u8)/);
+    if (match && match[1]) {
+        return match[1];  // Return the m3u8 URL
+    } else {
+        return "No m3u8 URL found";
     }
 }
