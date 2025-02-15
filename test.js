@@ -26,11 +26,17 @@ function functionWithHTTPResult(result) {
         // Directly check if the response contains the `.m3u8` URL
         var m3u8Url = result || null;
 
-        // If `.m3u8` URL is found, return it
-        if (m3u8Url && m3u8Url.indexOf(".m3u8") !== -1) {
+        // Regular expression to match the substring between the last " before .m3u8 and the first " after .m3u8
+        var regex = /"([^"]*\.m3u8)"/;
+
+        // Apply the regex to find the URL
+        var match = m3u8Url.match(regex);
+
+        // If a match is found, return the result without surrounding quotes
+        if (match && match[1]) {
             return JSON.stringify({
                 Type: "Direct",
-                Result: m3u8Url
+                Result: match[1]  // This will return the URL without the surrounding quotes
             });
         }
     } catch (error) {
