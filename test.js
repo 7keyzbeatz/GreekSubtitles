@@ -2,22 +2,20 @@
 
 // Object to map channel names to URLs
 const channelUrls = {
-    "channel1": "https://example.com/stream1",
-    "channel2": "https://example.com/stream2",
-    "channel3": "https://example.com/stream3"
+    "skai": "https://www.skai.gr/tv/live"
 };
 
 // Function to get the URL for a given channel name
 function getUrlForName(name) {
     if (channelUrls[name]) {
         return JSON.stringify({
-            Type: "Direct",
-            Result: channelUrls[name]
+            Type: "HTTPRequestNeeded",
+            Result: "https://www.skai.gr/tv/live"
         });
     } else {
         return JSON.stringify({
             Type: "HTTPRequestNeeded",
-            Result: "https://api.example.com/getStream?channel=" + encodeURIComponent(name)
+            Result: "https://www.skai.gr/tv/live"
         });
     }
 }
@@ -25,21 +23,27 @@ function getUrlForName(name) {
 // Function to handle HTTP request result
 function functionWithHTTPResult(result) {
     try {
-        let data = JSON.parse(result);
-        if (data && data.streamUrl) {
+        var data = JSON.parse(result);
+
+        // Look for `.m3u8` URL in various common keys
+        var m3u8Url = data.m3u8 || data.hls || data.streamUrl || null;
+
+        // If `.m3u8` URL is found, return it
+        if (m3u8Url && m3u8Url.indexOf(".m3u8") !== -1) {
             return JSON.stringify({
                 Type: "Direct",
-                Result: data.streamUrl
+                Result: m3u8Url
             });
         }
-    } catch (e) {
+    } catch (error) {
         return JSON.stringify({
             Type: "Error",
             Result: "Invalid JSON response"
         });
     }
+
     return JSON.stringify({
         Type: "Error",
-        Result: "No valid stream URL found"
+        Result: "No valid .m3u8 stream URL found"
     });
 }
