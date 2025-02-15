@@ -1,19 +1,45 @@
-// First method: Get the dynamic URL based on the name
+// JavaScript file for handling channel URLs and HTTP responses
+
+// Object to map channel names to URLs
+const channelUrls = {
+    "channel1": "https://example.com/stream1",
+    "channel2": "https://example.com/stream2",
+    "channel3": "https://example.com/stream3"
+};
+
+// Function to get the URL for a given channel name
 function getUrlForName(name) {
-    // Logic to return a URL based on the name (e.g., "skai")
-    if (name === "skai") {
-        return "https://www.skai.gr/tv/live";  // Example URL, based on the name
+    if (channelUrls[name]) {
+        return JSON.stringify({
+            Type: "Direct",
+            Result: channelUrls[name]
+        });
+    } else {
+        return JSON.stringify({
+            Type: "HTTPRequestNeeded",
+            Result: "https://api.example.com/getStream?channel=" + encodeURIComponent(name)
+        });
     }
-    return "No URL found for this name";
 }
 
-// Second method: Extract m3u8 URL from the HTML page content
-function extractM3u8UrlFromHtml(pageContent) {
-    // Use regular expressions to extract the m3u8 URL
-    const match = pageContent.match(/(https?:\/\/[^"']+\.m3u8)/);
-    if (match && match[1]) {
-        return match[1];  // Return the m3u8 URL
-    } else {
-        return "No m3u8 URL found";
+// Function to handle HTTP request result
+function functionWithHTTPResult(result) {
+    try {
+        let data = JSON.parse(result);
+        if (data && data.streamUrl) {
+            return JSON.stringify({
+                Type: "Direct",
+                Result: data.streamUrl
+            });
+        }
+    } catch (e) {
+        return JSON.stringify({
+            Type: "Error",
+            Result: "Invalid JSON response"
+        });
     }
+    return JSON.stringify({
+        Type: "Error",
+        Result: "No valid stream URL found"
+    });
 }
