@@ -25,7 +25,7 @@ function extractM3u8UrlFromHtml(pageText) {
         if (match && match[1]) {
             return match[1];  // Return the found m3u8 URL
         } else {
-            return "No m3u8 URL found";
+            return "No m3u8 URL found" + pageText;
         }
     } catch (error) {
         return "Error: " + error.message;
