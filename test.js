@@ -34,9 +34,6 @@ function functionWithHTTPResult(result) {
             });
         }
 
-        // Log the result to check the actual input (for debugging purposes)
-        console.log("Received result:", m3u8Url);
-
         // Regular expression to match anything that starts with and contains .m3u8
         var regex = /([a-zA-Z0-9._-]+\.m3u8[a-zA-Z0-9._-]*)/;
 
