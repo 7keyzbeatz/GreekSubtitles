@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Custom Receiver</title>
+  <script src="https://cdn.jsdelivr.net/npm/shaka-player@4.4.0/dist/shaka-player.compiled.js"></script>
+</head>
+<body>
+  <video id="video" width="100%" height="100%" controls></video>
+  <script>
+    shaka.polyfill.installAll();
+    const video = document.getElementById('video');
+    const player = new shaka.Player(video);
+
+    player.addEventListener('error', e => console.error('Error', e.detail));
+
+    window.castReceiverManager = cast.receiver.CastReceiverManager.getInstance();
+
+    const mediaManager = new cast.receiver.MediaManager(video);
+    mediaManager.setMessageInterceptor(cast.receiver.media.MessageType.LOAD, request => {
+      // Intercept LOAD request
+      console.log('LOAD request', request);
+
+      const media = request.media;
+      if (media && media.tracks && media.tracks.length > 0) {
+        media.tracks.forEach(track => {
+          // Modify track URL to be HTTP from device if needed
+          console.log('Subtitle track', track.id, track.contentId);
+        });
+      }
+      return request;
+    });
+
+    window.castReceiverManager.start({ statusText: "Ready" });
+  </script>
+</body>
+</html>
