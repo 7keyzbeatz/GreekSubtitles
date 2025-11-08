@@ -1,133 +1,277 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Cast Receiver / Stream Player</title>
+  <meta charset="utf-8" />
+  <title>Custom Receiver / Debug HLS Loader</title>
+
+  <!-- Shaka player (HLS & DASH handling) -->
   <script src="https://cdn.jsdelivr.net/npm/shaka-player@4.4.0/dist/shaka-player.compiled.js"></script>
+
   <style>
-    body {
-      font-family: "Segoe UI", Arial, sans-serif;
-      background: linear-gradient(145deg, #0f2027, #203a43, #2c5364);
-      color: #fff;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      margin: 0;
-      text-align: center;
+    :root{
+      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#9aa6b2; --glass: rgba(255,255,255,0.03);
     }
-    h1 {
-      margin-bottom: 10px;
-      font-size: 26px;
-    }
-    #player-container {
-      position: relative;
-      width: 90%;
-      max-width: 900px;
-      background: #000;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 0 20px rgba(0,0,0,0.4);
-    }
-    video {
-      width: 100%;
-      height: auto;
-      border-radius: 16px;
-    }
-    #controls {
-      margin-top: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      width: 90%;
-      max-width: 800px;
-    }
-    input {
-      padding: 10px;
-      border-radius: 8px;
-      border: none;
-      outline: none;
-      width: 100%;
-      font-size: 16px;
-    }
-    button {
-      padding: 10px 20px;
-      font-size: 16px;
-      background: #1db954;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: background 0.3s;
-    }
-    button:hover {
-      background: #17a24a;
-    }
-    #status {
-      margin-top: 10px;
-      font-size: 15px;
-      opacity: 0.8;
-    }
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto;}
+    body{background:linear-gradient(180deg,#061021 0%, #071427 100%); color:#e6eef3; display:flex; align-items:center; justify-content:center;}
+    .wrap{width:1000px; max-width:calc(100% - 24px); margin:24px; background:var(--card); border-radius:14px; padding:18px; box-shadow:0 10px 30px rgba(2,6,23,0.6);}
+    header{display:flex; gap:12px; align-items:center; margin-bottom:12px;}
+    header h1{font-size:18px;margin:0;font-weight:600}
+    .controls{display:flex; gap:12px; flex-wrap:wrap; align-items:center}
+    input[type=text]{background:var(--glass); border:1px solid rgba(255,255,255,0.04); padding:10px 12px; color:inherit; border-radius:10px; min-width:420px;}
+    button{background:linear-gradient(90deg,var(--accent),#3b82f6); border:none; color:#042028; padding:10px 14px; border-radius:10px; font-weight:600; cursor:pointer;}
+    button.ghost{background:transparent; border:1px solid rgba(255,255,255,0.06); color:var(--muted);}
+    label.switch{display:inline-flex; align-items:center; gap:8px; cursor:pointer; color:var(--muted)}
+    .playerRow{display:flex; gap:16px;}
+    .player{flex:1; background:#000; border-radius:10px; padding:8px; min-height:320px; position:relative; overflow:hidden;}
+    video{width:100%; height:100%; background:#000; border-radius:8px; display:block;}
+    .right{width:340px; max-width:40%;}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); padding:12px; border-radius:10px; border:1px solid rgba(255,255,255,0.03); }
+    .log{height:260px; overflow:auto; font-family:monospace; font-size:12px; color:var(--muted); padding:8px; background:#031018; border-radius:8px;}
+    .tiny{font-size:12px;color:var(--muted)}
+    .row{display:flex; gap:8px; align-items:center;}
+    .status{padding:6px 8px; border-radius:8px; font-weight:600; color:#052; background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.08)}
+    footer{margin-top:12px; font-size:12px; color:var(--muted)}
   </style>
 </head>
 <body>
-  <h1>🎬 Local Stream Receiver</h1>
+  <div class="wrap">
+    <header>
+      <h1>Custom Receiver — HLS/DASH/MP3 debug player</h1>
+      <div style="flex:1"></div>
+      <div class="tiny">Test & debug mode</div>
+    </header>
 
-  <div id="player-container">
-    <video id="video" controls></video>
-  </div>
-
-  <div id="controls">
-    <input id="urlInput" type="text" placeholder="Enter stream URL (.m3u8, .mpd, .mp3, etc)">
-    <div style="display:flex; gap:10px; justify-content:center;">
-      <button onclick="loadStream()">▶️ Load & Play</button>
-      <button onclick="video.pause()">⏸️ Pause</button>
-      <button onclick="video.play()">▶️ Resume</button>
+    <div class="controls card" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input id="inputUrl" type="text" placeholder="Paste master m3u8 / mpd / mp3 / direct mp4 URL here" />
+      <button id="btnLoad">Load & Parse</button>
+      <button id="btnPlay" class="ghost">Play Blob</button>
+      <label class="switch"><input id="useProxy" type="checkbox" /> Use CORS proxy</label>
+      <input id="proxyBase" type="text" value="https://corsproxy.io/?" style="min-width:220px" />
+      <div style="flex:1"></div>
+      <div id="status" class="status">idle</div>
     </div>
-    <div id="status">Ready to play!</div>
+
+    <div class="playerRow" style="margin-top:12px">
+      <div class="player">
+        <video id="video" controls></video>
+        <!-- overlay buttons could be added here -->
+      </div>
+
+      <div class="right">
+        <div class="card">
+          <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
+            <div style="font-weight:700">Logs</div>
+            <div style="flex:1"></div>
+            <button id="btnClear" class="ghost">Clear</button>
+          </div>
+          <div id="log" class="log"></div>
+          <div style="margin-top:8px;" class="tiny">Notes: If the source blocks CORS, toggle the proxy. For production host the receiver over HTTPS.</div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Quick testing: serve this file with `python -m http.server` or GitHub Pages. To use as real Cast receiver host via HTTPS (GitHub Pages / Vercel) or use ngrok for local-to-HTTPS.
+    </footer>
   </div>
 
-  <script>
-    shaka.polyfill.installAll();
-    const video = document.getElementById("video");
-    const player = new shaka.Player(video);
-    const status = document.getElementById("status");
+<script>
+(() => {
+  const inputUrl = document.getElementById('inputUrl');
+  const btnLoad = document.getElementById('btnLoad');
+  const btnPlay = document.getElementById('btnPlay');
+  const useProxy = document.getElementById('useProxy');
+  const proxyBase = document.getElementById('proxyBase');
+  const logEl = document.getElementById('log');
+  const statusEl = document.getElementById('status');
+  const btnClear = document.getElementById('btnClear');
+  const video = document.getElementById('video');
 
-    player.addEventListener("error", e => {
-      console.error("Error", e.detail);
-      status.textContent = "❌ " + e.detail.message;
-    });
+  // Shaka init
+  shaka.polyfill.installAll();
+  let shakaPlayer;
+  try {
+    shakaPlayer = new shaka.Player(video);
+    shakaPlayer.addEventListener('error', e => log('Shaka error: ' + JSON.stringify(e.detail)));
+  } catch (err) {
+    log('Shaka init failed: ' + err);
+  }
 
-    async function loadStream() {
-      const url = document.getElementById("urlInput").value.trim();
-      if (!url) {
-        alert("Please enter a URL first!");
-        return;
-      }
+  // helpers
+  function log(...args){
+    const txt = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    const time = new Date().toLocaleTimeString();
+    logEl.innerText += `[${time}] ${txt}\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  function setStatus(s){ statusEl.innerText = s; }
 
-      // Double encode for safety with corsproxy
-      const proxiedUrl = "https://corsproxy.io/?" + encodeURIComponent(encodeURIComponent(url));
+  // make absolute url from base
+  function absolutize(ref, base) {
+    try { return new URL(ref, base).href; } catch(e) { return ref; }
+  }
 
-      status.textContent = "⏳ Loading stream...";
-      console.log("Trying with proxy:", proxiedUrl);
+  // fetch text (optionally via proxy)
+  async function fetchText(url) {
+    let target = url;
+    if (useProxy.checked) target = proxyBase.value + encodeURIComponent(url);
+    log('FETCH', target);
+    const r = await fetch(target, { mode: 'cors' });
+    if (!r.ok) throw new Error('Fetch failed ' + r.status + ' ' + r.statusText);
+    return await r.text();
+  }
 
-      try {
-        await player.load(proxiedUrl);
-        status.textContent = "✅ Now playing via proxy!";
-        video.play();
-      } catch (error) {
-        console.warn("Proxy failed, trying direct:", error);
-        try {
-          await player.load(url);
-          status.textContent = "✅ Now playing directly!";
-          video.play();
-        } catch (err2) {
-          console.error("Both failed:", err2);
-          status.textContent = "❌ Stream load failed (404 or blocked).";
+  // detect playlist type
+  function detectType(text, url) {
+    if (/^#EXTM3U/m.test(text)) return 'm3u8';
+    if (/<Period|<MPD/i.test(text)) return 'mpd';
+    if (/^<!doctype html/i.test(text) && url.endsWith('.m3u8')) return 'm3u8'; // fallback
+    return 'other';
+  }
+
+  // Parse an m3u8, recursively resolve nested m3u8s and return a single final playlist text (with absolute or proxied segment URLs)
+  async function buildFlattenedM3U8(url, visited = new Set()) {
+    if (visited.has(url)) throw new Error('Loop detected for ' + url);
+    visited.add(url);
+
+    const txt = await fetchText(url);
+    const type = detectType(txt, url);
+    if (type !== 'm3u8') {
+      throw new Error('Not an m3u8 playlist: ' + url);
+    }
+
+    const lines = txt.split(/\r?\n/);
+    // If this file is a master playlist (contains #EXT-X-STREAM-INF), we must fetch each variant and convert it to local variant lines (absolute)
+    const isMaster = lines.some(l => l.startsWith('#EXT-X-STREAM-INF'));
+    if (isMaster) {
+      log('Master playlist detected:', url);
+      const out = [];
+      for (let i=0;i<lines.length;i++){
+        const line = lines[i].trim();
+        if (line === '') continue;
+        if (line.startsWith('#EXT-X-STREAM-INF')) {
+          // keep this line
+          out.push(line);
+          // next non-empty line is the variant uri
+          let j = i+1;
+          while (j < lines.length && lines[j].trim() === '') j++;
+          const variantRef = lines[j] ? lines[j].trim() : null;
+          if (!variantRef) throw new Error('Malformed master playlist');
+          const variantAbs = absolutize(variantRef, url);
+          // recursively flatten the variant to its own playlist and upload/create blob URL later. For now, add absolute variant URL (we will process each variant to make local blobs)
+          out.push(variantAbs);
+          i = j;
+        } else {
+          out.push(line);
         }
       }
+      // For master we will return a "master" that contains absolute variant URLs (caller can then individually flatten if desired).
+      return out.join('\n');
+    } else {
+      // This is a media playlist with segments (.ts or .html disguised)
+      log('Media playlist detected:', url);
+      const base = url.substring(0, url.lastIndexOf('/') + 1);
+      const out = [];
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        if (line.startsWith('#')) {
+          out.push(line);
+        } else {
+          // segment or relative playlist
+          const segAbs = absolutize(line.trim(), base);
+          // if the segment url ends with .m3u8 → recursively fetch & flatten it (rare case)
+          if (segAbs.toLowerCase().endsWith('.m3u8')) {
+            log('Found nested m3u8 inside media playlist, flattening: ' + segAbs);
+            const nested = await buildFlattenedM3U8(segAbs, visited);
+            // nested will be text; we cannot inline a playlist into a media playlist, so instead write its absolute URL (we keep it simple)
+            out.push(segAbs);
+          } else {
+            // rewrite via proxy if needed (we keep the extension same but for Chromecast we want .ts sometimes; leave URL, many hosts serve TS with .html name)
+            let finalUrl = segAbs;
+            if (useProxy.checked) finalUrl = proxyBase.value + encodeURIComponent(segAbs);
+            out.push(finalUrl);
+          }
+        }
+      }
+      return out.join('\n');
     }
-  </script>
+  }
+
+  // Build playlist blob and return object URL
+  async function makePlaylistBlobUrl(url) {
+    setStatus('building');
+    const flattened = await buildFlattenedM3U8(url);
+    log('Flattened playlist length:', flattened.length);
+    const blob = new Blob([flattened], { type: 'application/vnd.apple.mpegurl' });
+    return URL.createObjectURL(blob);
+  }
+
+  // UI actions
+  btnClear.addEventListener('click', ()=> logEl.innerText = '');
+  btnLoad.addEventListener('click', async () => {
+    const u = inputUrl.value.trim();
+    if (!u) return alert('Paste a master / media url first.');
+    try {
+      setStatus('fetching');
+      log('Starting processing for', u);
+      const txt = await fetchText(u);
+      const t = detectType(txt, u);
+      log('Detected type:', t);
+      if (t === 'm3u8') {
+        // Flatten and create blob
+        const blobUrl = await makePlaylistBlobUrl(u);
+        log('Created local playlist blob:', blobUrl);
+        // set video src to blob for immediate play (use Shaka to support HLS)
+        // store the blob url for Play button
+        btnPlay.dataset.blob = blobUrl;
+        setStatus('ready (playlist blob created)');
+        btnPlay.classList.remove('ghost');
+      } else if (t === 'mpd' || u.toLowerCase().endsWith('.mpd')) {
+        // For DASH: either feed directly to Shaka (no blob rebuilding needed)
+        try {
+          await shakaPlayer.load(u);
+          setStatus('playing DASH');
+          log('Shaka loaded DASH directly:', u);
+        } catch (e) { log('Shaka load DASH error', e); alert('Shaka failed to load DASH: '+e); }
+      } else {
+        // fallback: try to feed directly (mp4/mp3)
+        try {
+          video.src = u;
+          video.play();
+          setStatus('playing direct media');
+          log('Playing direct media:', u);
+        } catch (e) { log('Play direct failed', e); }
+      }
+    } catch (err) {
+      log('Error:', err.message || err);
+      setStatus('error');
+      alert('Error: ' + (err.message || err));
+    }
+  });
+
+  btnPlay.addEventListener('click', async () => {
+    const blobUrl = btnPlay.dataset.blob;
+    if (!blobUrl) return alert('No playlist blob ready. Click Load & Parse first.');
+    try {
+      setStatus('loading into Shaka');
+      await shakaPlayer.load(blobUrl);
+      setStatus('playing (shaka)');
+      log('Shaka playing blob URL');
+    } catch (e) {
+      log('Shaka load error:', e);
+      alert('Shaka load error: ' + (e && e.detail ? e.detail : e));
+      setStatus('error');
+    }
+  });
+
+  // convenience: test input with Enter key
+  inputUrl.addEventListener('keydown', e => { if (e.key === 'Enter') btnLoad.click(); });
+
+  // initial example
+  inputUrl.value = '';
+  setStatus('idle');
+
+})();
+</script>
 </body>
 </html>
