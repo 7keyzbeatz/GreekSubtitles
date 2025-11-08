@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Custom HLS Player</title>
+  <style>
+    body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    video { width: 80%; height: auto; background: #000; }
+  </style>
+</head>
+<body>
+  <video id="video" controls autoplay></video>
+
+  <script>
+    const video = document.getElementById('video');
+    const mediaSource = new MediaSource();
+    video.src = URL.createObjectURL(mediaSource);
+
+    mediaSource.addEventListener('sourceopen', async () => {
+      const masterUrl = "https://tmstr3.shadowlandschronicles.com/pl/H4sIAAAAAAAAAw3MW3KDIBQA0C0hoh37VxvR0BGHWxDlTyCpSXwlbSYNq2_PAo6P0yM5xmmWJARFiUvSA0kxRtkLOiASu1ehYDlUvPjAPYJq5Eoq4kt6F.HycOW4cLWRoQCqO_8YZrb4z._YdO3dB5rzYKB._1klAqZnRs05z4eS3FTBT7xi..GU3fi0Bq4z3qJo7eU4mxKg3kEvWlNw7K9NIYi.TJujjA6Iwv_btAvkvfRniZk0GILEI1jkV4t_H7aA1e3yACVr6o5vNrRS6mn11Vvo8bjn1ddTdV7Y2Rujtmej2dVRD1ZvkZP51sYCWyqQUJHq52j_B0HEn6whAQAA/master.m3u8"; // <-- Replace with your master.m3u8 URL
+      let sourceBuffer;
+
+      try {
+        // Fetch master playlist
+        const masterResp = await fetch(masterUrl);
+        const masterText = await masterResp.text();
+        const lines = masterText.split("\n");
+
+        // Find first variant playlist (index.m3u8)
+        let variantUrl;
+        for (const line of lines) {
+          if (line.includes("index.m3u8")) {
+            variantUrl = new URL(line, masterUrl).href;
+            break;
+          }
+        }
+
+        if (!variantUrl) throw new Error("Variant playlist not found");
+
+        // Fetch variant playlist
+        const variantResp = await fetch(variantUrl);
+        const variantText = await variantResp.text();
+        const tsUrls = variantText.split("\n").filter(line => line.trim() && !line.startsWith("#"));
+
+        // Initialize SourceBuffer for MPEG-TS (H.264 + AAC)
+        sourceBuffer = mediaSource.addSourceBuffer('video/mp2t; codecs="avc1.42c015, mp4a.40.2"');
+
+        // Sequentially fetch and append TS segments
+        for (const tsUrl of tsUrls) {
+          try {
+            const fullUrl = new URL(tsUrl, variantUrl).href;
+            const resp = await fetch(fullUrl);
+            const arrayBuffer = await resp.arrayBuffer();
+            await appendBufferAsync(sourceBuffer, arrayBuffer);
+          } catch (err) {
+            console.error("Failed to fetch segment:", tsUrl, err);
+          }
+        }
+
+        mediaSource.endOfStream();
+      } catch (err) {
+        console.error("Error loading HLS stream:", err);
+      }
+    });
+
+    function appendBufferAsync(sourceBuffer, buffer) {
+      return new Promise((resolve, reject) => {
+        sourceBuffer.addEventListener('updateend', resolve, { once: true });
+        sourceBuffer.addEventListener('error', reject, { once: true });
+        sourceBuffer.appendBuffer(buffer);
+      });
+    }
+  </script>
+</body>
+</html>
