@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Cast Receiver / Stream Player</title>
+  <script src="https://cdn.jsdelivr.net/npm/shaka-player@4.4.0/dist/shaka-player.compiled.js"></script>
+  <style>
+    body {
+      font-family: "Segoe UI", Arial, sans-serif;
+      background: linear-gradient(145deg, #0f2027, #203a43, #2c5364);
+      color: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+    }
+    h1 {
+      margin-bottom: 10px;
+      font-size: 26px;
+    }
+    #player-container {
+      position: relative;
+      width: 90%;
+      max-width: 900px;
+      background: #000;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 0 20px rgba(0,0,0,0.4);
+    }
+    video {
+      width: 100%;
+      height: auto;
+      border-radius: 16px;
+    }
+    #controls {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 90%;
+      max-width: 800px;
+    }
+    input {
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      outline: none;
+      width: 100%;
+      font-size: 16px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #1db954;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.3s;
+    }
+    button:hover {
+      background: #17a24a;
+    }
+    #status {
+      margin-top: 10px;
+      font-size: 15px;
+      opacity: 0.8;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎬 Local Stream Receiver</h1>
+
+  <div id="player-container">
+    <video id="video" controls></video>
+  </div>
+
+  <div id="controls">
+    <input id="urlInput" type="text" placeholder="Enter stream URL (.m3u8, .mpd, .mp3, etc)">
+    <div style="display:flex; gap:10px; justify-content:center;">
+      <button onclick="loadStream()">▶️ Load & Play</button>
+      <button onclick="video.pause()">⏸️ Pause</button>
+      <button onclick="video.play()">▶️ Resume</button>
+    </div>
+    <div id="status">Ready to play!</div>
+  </div>
+
+  <script>
+    shaka.polyfill.installAll();
+    const video = document.getElementById("video");
+    const player = new shaka.Player(video);
+    const status = document.getElementById("status");
+
+    player.addEventListener("error", e => {
+      console.error("Error", e.detail);
+      status.textContent = "❌ " + e.detail.message;
+    });
+
+    async function loadStream() {
+      const url = document.getElementById("urlInput").value.trim();
+      if (!url) {
+        alert("Please enter a URL first!");
+        return;
+      }
+
+      // Double encode for safety with corsproxy
+      const proxiedUrl = "https://corsproxy.io/?" + encodeURIComponent(encodeURIComponent(url));
+
+      status.textContent = "⏳ Loading stream...";
+      console.log("Trying with proxy:", proxiedUrl);
+
+      try {
+        await player.load(proxiedUrl);
+        status.textContent = "✅ Now playing via proxy!";
+        video.play();
+      } catch (error) {
+        console.warn("Proxy failed, trying direct:", error);
+        try {
+          await player.load(url);
+          status.textContent = "✅ Now playing directly!";
+          video.play();
+        } catch (err2) {
+          console.error("Both failed:", err2);
+          status.textContent = "❌ Stream load failed (404 or blocked).";
+        }
+      }
+    }
+  </script>
+</body>
+</html>
