@@ -2,248 +2,160 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Custom Receiver / Debug HLS Loader (Fixed)</title>
-
-  <!-- Shaka player (HLS & DASH handling) -->
-  <script src="https://cdn.jsdelivr.net/npm/shaka-player@4.4.0/dist/shaka-player.compiled.js"></script>
-
+  <title>Manual MSE TS-player (fetch .html as TS)</title>
   <style>
-    :root{
-      --bg:#0f1724; --card:#0b1220; --accent:#06b6d4; --muted:#9aa6b2; --glass: rgba(255,255,255,0.03);
-    }
-    html,body{height:100%;margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto;}
-    body{background:linear-gradient(180deg,#061021 0%, #071427 100%);
-         color:#e6eef3;display:flex;align-items:center;justify-content:center;}
-    .wrap{width:1000px;max-width:calc(100% - 24px);margin:24px;background:var(--card);
-          border-radius:14px;padding:18px;box-shadow:0 10px 30px rgba(2,6,23,0.6);}
-    header{display:flex;gap:12px;align-items:center;margin-bottom:12px;}
-    header h1{font-size:18px;margin:0;font-weight:600}
-    .controls{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
-    input[type=text]{background:var(--glass);border:1px solid rgba(255,255,255,0.04);
-                     padding:10px 12px;color:inherit;border-radius:10px;min-width:420px;}
-    button{background:linear-gradient(90deg,var(--accent),#3b82f6);border:none;color:#042028;
-            padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer;}
-    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted);}
-    label.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;color:var(--muted)}
-    .playerRow{display:flex;gap:16px;}
-    .player{flex:1;background:#000;border-radius:10px;padding:8px;min-height:320px;position:relative;overflow:hidden;}
-    video{width:100%;height:100%;background:#000;border-radius:8px;display:block;}
-    .right{width:340px;max-width:40%;}
-    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));
-          padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);}
-    .log{height:260px;overflow:auto;font-family:monospace;font-size:12px;color:var(--muted);
-         padding:8px;background:#031018;border-radius:8px;}
-    .tiny{font-size:12px;color:var(--muted)}
-    .status{padding:6px 8px;border-radius:8px;font-weight:600;color:#052;
-            background:rgba(6,182,212,0.12);border:1px solid rgba(6,182,212,0.08)}
+    body{font-family:system-ui;margin:20px;background:#111;color:#eee}
+    input{width:70%}
+    button{padding:6px 10px;margin-left:8px}
+    video{width:100%;max-width:900px;margin-top:16px;background:#000}
+    pre{white-space:pre-wrap;color:#9ad}
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Custom Receiver — HLS/DASH/MP3 Debug Player</h1>
-      <div style="flex:1"></div>
-      <div class="tiny">Test & debug mode</div>
-    </header>
+  <h2>Manual MSE test — read remote .html as TS</h2>
+  <p>Paste a single segment URL (page-0.html) below and press Play.</p>
 
-    <div class="controls card">
-      <input id="inputUrl" type="text" placeholder="Paste master m3u8 / mpd / mp3 / direct mp4 URL here" />
-      <button id="btnLoad">Load & Parse</button>
-      <button id="btnPlay" class="ghost">Play Blob</button>
-      <label class="switch"><input id="useProxy" type="checkbox" /> Use CORS proxy</label>
-      <input id="proxyBase" type="text" value="https://corsproxy.io/?" style="min-width:220px" />
-      <div style="flex:1"></div>
-      <div id="status" class="status">idle</div>
-    </div>
+  <input id="url" placeholder="https://.../page-0.html" />
+  <button id="playBtn">Play</button>
+  <button id="stopBtn">Stop</button>
+  <p id="log">idle</p>
 
-    <div class="playerRow" style="margin-top:12px">
-      <div class="player">
-        <video id="video" controls></video>
-      </div>
-
-      <div class="right">
-        <div class="card">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-            <div style="font-weight:700">Logs</div>
-            <div style="flex:1"></div>
-            <button id="btnClear" class="ghost">Clear</button>
-          </div>
-          <div id="log" class="log"></div>
-          <div style="margin-top:8px;" class="tiny">
-            Notes: If the source blocks CORS, toggle the proxy. For production host this receiver via HTTPS.
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <footer class="tiny" style="margin-top:12px;">
-      Quick testing: serve this file with <code>python -m http.server</code> or GitHub Pages.
-      For real Chromecast receivers host via HTTPS (Pages / Vercel / ngrok).
-    </footer>
-  </div>
+  <video id="video" controls></video>
+  <pre id="debug"></pre>
 
 <script>
-(() => {
-  const inputUrl = document.getElementById('inputUrl');
-  const btnLoad = document.getElementById('btnLoad');
-  const btnPlay = document.getElementById('btnPlay');
-  const useProxy = document.getElementById('useProxy');
-  const proxyBase = document.getElementById('proxyBase');
-  const logEl = document.getElementById('log');
-  const statusEl = document.getElementById('status');
-  const btnClear = document.getElementById('btnClear');
-  const video = document.getElementById('video');
+const video = document.getElementById('video');
+const urlInput = document.getElementById('url');
+const playBtn = document.getElementById('playBtn');
+const stopBtn = document.getElementById('stopBtn');
+const logEl = document.getElementById('log');
+const debug = document.getElementById('debug');
 
-  // Shaka init
-  shaka.polyfill.installAll();
-  let player;
-  try {
-    player = new shaka.Player(video);
-    player.addEventListener('error', e => log('Shaka error: ' + JSON.stringify(e.detail)));
-  } catch (err) {
-    log('Shaka init failed: ' + err);
-  }
+function log(s){
+  logEl.textContent = s;
+  debug.textContent = (new Date()).toISOString() + "  " + s + "\n" + debug.textContent;
+  console.log(s);
+}
 
-  // Apply filters to fix .html TS segments
-  const net = player.getNetworkingEngine();
-  if (net) {
-    // Fix outgoing requests for .html TS segments
-    net.registerRequestFilter((type, request) => {
-      if (type === shaka.net.NetworkingEngine.RequestType.SEGMENT) {
-        request.uris = request.uris.map(u => {
-          if (/\.html(\?|$)/i.test(u)) {
-            log('[REQ] Treating as TS segment:', u);
-          }
-          if (useProxy.checked) {
-            return proxyBase.value + encodeURIComponent(u);
-          }
-          return u;
-        });
-        request.headers['Accept'] = 'video/mp2t, application/octet-stream;q=0.9,*/*;q=0.8';
-      }
-    });
+let mediaSource = null;
+let sb = null;
+let abortController = null;
 
-    // Fix response headers for .html segments
-    net.registerResponseFilter((type, response) => {
-      if (response && /\.html(\?|$)/i.test(response.uri)) {
-        log('[RESP] Forcing video/mp2t for:', response.uri);
-        response.headers['content-type'] = 'video/mp2t';
-      }
-    });
-  }
+playBtn.addEventListener('click', async () => {
+  const segUrl = urlInput.value.trim();
+  if (!segUrl) return alert('Paste the segment URL first');
 
-  // Helper functions
-  function log(...args){
-    const txt = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
-    const time = new Date().toLocaleTimeString();
-    logEl.innerText += `[${time}] ${txt}\n`;
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-  function setStatus(s){ statusEl.innerText = s; }
+  // reset
+  stopPlayback();
 
-  // Utility: fetch playlist text
-  async function fetchText(url) {
-    let target = url;
-    if (useProxy.checked) target = proxyBase.value + encodeURIComponent(url);
-    log('FETCH', target);
-    const r = await fetch(target, { mode: 'cors' });
-    if (!r.ok) throw new Error('Fetch failed ' + r.status + ' ' + r.statusText);
-    return await r.text();
-  }
+  log('Starting — creating MediaSource');
+  mediaSource = new MediaSource();
+  video.src = URL.createObjectURL(mediaSource);
 
-  // Detect file type by content
-  function detectType(text, url) {
-    if (/^#EXTM3U/m.test(text)) return 'm3u8';
-    if (/<MPD/i.test(text)) return 'mpd';
-    return 'other';
-  }
+  // NOTE: codec string must match your TS stream. If it fails, try removing codecs param:
+  // 'video/mp2t' OR exact codecs 'video/mp2t; codecs="avc1.42E01E, mp4a.40.2"'
+  const MIME = 'video/mp2t; codecs="avc1.42E01E, mp4a.40.2"';
 
-  // Recursive flatten of playlists
-  async function buildFlattenedM3U8(url, visited = new Set()) {
-    if (visited.has(url)) throw new Error('Loop detected for ' + url);
-    visited.add(url);
-    const txt = await fetchText(url);
-    const type = detectType(txt, url);
-    if (type !== 'm3u8') throw new Error('Not an m3u8: ' + url);
-
-    const lines = txt.split(/\r?\n/);
-    const isMaster = lines.some(l => l.startsWith('#EXT-X-STREAM-INF'));
-    const base = url.substring(0, url.lastIndexOf('/') + 1);
-    const out = [];
-
-    for (let i=0;i<lines.length;i++) {
-      const line = lines[i].trim();
-      if (line === '') continue;
-      if (line.startsWith('#')) {
-        out.push(line);
-      } else {
-        const abs = new URL(line, base).href;
-        out.push(useProxy.checked ? proxyBase.value + encodeURIComponent(abs) : abs);
-      }
-    }
-    return out.join('\n');
-  }
-
-  async function makePlaylistBlobUrl(url) {
-    setStatus('building');
-    const flat = await buildFlattenedM3U8(url);
-    log('Flattened playlist length:', flat.length);
-    const blob = new Blob([flat], { type: 'application/vnd.apple.mpegurl' });
-    return URL.createObjectURL(blob);
-  }
-
-  btnClear.addEventListener('click', ()=> logEl.innerText = '');
-
-  btnLoad.addEventListener('click', async () => {
-    const u = inputUrl.value.trim();
-    if (!u) return alert('Paste a master / media URL first.');
+  mediaSource.addEventListener('sourceopen', async () => {
+    log('MediaSource opened — adding SourceBuffer (' + MIME + ')');
     try {
-      setStatus('fetching');
-      log('Starting processing for', u);
-      const txt = await fetchText(u);
-      const t = detectType(txt, u);
-      log('Detected type:', t);
-      if (t === 'm3u8') {
-        const blobUrl = await makePlaylistBlobUrl(u);
-        btnPlay.dataset.blob = blobUrl;
-        btnPlay.classList.remove('ghost');
-        setStatus('ready (playlist blob created)');
-        log('Playlist blob ready:', blobUrl);
-      } else if (t === 'mpd' || u.toLowerCase().endsWith('.mpd')) {
-        await player.load(u);
-        setStatus('playing DASH');
-        log('Shaka loaded DASH:', u);
-      } else {
-        video.src = u;
-        await video.play();
-        setStatus('playing direct media');
-        log('Playing direct:', u);
-      }
-    } catch (err) {
-      log('Error:', err.message || err);
-      setStatus('error');
-      alert('Error: ' + (err.message || err));
-    }
-  });
-
-  btnPlay.addEventListener('click', async () => {
-    const blobUrl = btnPlay.dataset.blob;
-    if (!blobUrl) return alert('No playlist blob ready.');
-    try {
-      setStatus('loading Shaka');
-      await player.load(blobUrl);
-      setStatus('playing (HLS via Shaka)');
-      log('Shaka playing blob URL');
+      sb = mediaSource.addSourceBuffer(MIME);
     } catch (e) {
-      log('Shaka load error:', e);
-      alert('Shaka load error: ' + (e && e.detail ? e.detail : e));
-      setStatus('error');
+      log('addSourceBuffer failed. Trying without codecs...');
+      try {
+        sb = mediaSource.addSourceBuffer('video/mp2t');
+      } catch (e2) {
+        log('addSourceBuffer failed (no supported mime). See console for details.');
+        console.error(e, e2);
+        return;
+      }
+    }
+
+    // small queue to ensure we append sequentially
+    const appendQueue = [];
+    let appending = false;
+
+    function enqueueAppend(buf) {
+      appendQueue.push(buf);
+      if (!appending) processQueue();
+    }
+
+    function processQueue() {
+      if (!appendQueue.length) { appending = false; return; }
+      appending = true;
+      const buf = appendQueue.shift();
+      try {
+        sb.appendBuffer(buf);
+      } catch (err) {
+        log('appendBuffer error: ' + err);
+        console.error(err);
+        appending = false;
+        return;
+      }
+      const onEnd = () => {
+        sb.removeEventListener('updateend', onEnd);
+        // optional: prune buffer to keep memory low
+        try {
+          if (sb.buffered && sb.buffered.length) {
+            // keep only last 30s; adjust if needed
+            const end = sb.buffered.end(sb.buffered.length - 1);
+            const removeUntil = Math.max(0, end - 30);
+            if (removeUntil > 0) {
+              try { sb.remove(0, removeUntil); } catch(e){/**/}
+            }
+          }
+        } catch(e){}
+        processQueue();
+      };
+      sb.addEventListener('updateend', onEnd, { once: true });
+    }
+
+    // Fetch & append the single segment
+    try {
+      log('Fetching segment: ' + segUrl);
+      abortController = new AbortController();
+      const resp = await fetch(segUrl, { signal: abortController.signal, credentials: 'omit' });
+      if (!resp.ok) {
+        log('Fetch failed: ' + resp.status + ' ' + resp.statusText);
+        return;
+      }
+      const buf = await resp.arrayBuffer();
+      log('Fetched ' + buf.byteLength + ' bytes — appending to SourceBuffer');
+      enqueueAppend(new Uint8Array(buf));
+      // start playback once some data appended
+      video.play().catch(e => { console.warn('play() failed', e); });
+    } catch (err) {
+      if (err.name === 'AbortError') log('Fetch aborted');
+      else {
+        log('Fetch error: ' + err);
+        console.error(err);
+        // CORS likely: show hint
+        if (err instanceof TypeError) {
+          log('Fetch blocked — likely CORS. Use a proxy or run this page from same origin.');
+        }
+      }
     }
   });
 
-  inputUrl.addEventListener('keydown', e => { if (e.key === 'Enter') btnLoad.click(); });
-  setStatus('idle');
-})();
+  mediaSource.addEventListener('error', e => {
+    log('MediaSource error: ' + e);
+  });
+
+});
+
+stopBtn.addEventListener('click', stopPlayback);
+
+function stopPlayback(){
+  if (abortController) { try{ abortController.abort(); }catch(e){} }
+  try { if (sb) { sb.abort(); } } catch(e){}
+  try { if (mediaSource && mediaSource.readyState === 'open') mediaSource.endOfStream(); } catch(e){}
+  try { video.pause(); video.removeAttribute('src'); video.load(); } catch(e){}
+  mediaSource = null; sb = null; abortController = null;
+  log('stopped/reset');
+}
+
+// Small helper: example URL prefill
+urlInput.value = 'https://galaxypathways.xyz/content/e19783f02cff4a720881491fd7f0c6fb/6a909f4727881a3469bd52fa9b42122c/page-0.html';
 </script>
 </body>
 </html>
