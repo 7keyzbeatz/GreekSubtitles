@@ -1,29 +1,56 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8">
-    <title>Custom Receiver</title>
-    <script type="text/javascript" src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-  </head>
-  <body>
-    <video id="player" controls autoplay style="width: 100%; height: 100%;"></video>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Custom Chromecast Receiver</title>
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.1/dist/hls.min.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; background: black; }
+    #video { width: 100%; height: 100%; background: black; }
+  </style>
+</head>
+<body>
+  <video id="video" autoplay playsinline></video>
 
-    <script>
-      const context = cast.framework.CastReceiverContext.getInstance();
-      const playerManager = context.getPlayerManager();
-      const videoElement = document.getElementById("player");
+  <script>
+    const context = cast.framework.CastReceiverContext.getInstance();
+    const playerManager = context.getPlayerManager();
+    const video = document.getElementById("video");
 
-      // Handle LOAD requests
-      playerManager.setMessageInterceptor(
-        cast.framework.messages.MessageType.LOAD,
-        (loadRequestData) => {
-          const url = loadRequestData.media.contentId; // This should be your Vercel API URL
-          videoElement.src = url;
-          return loadRequestData;
+    // Listen for LOAD events from sender
+    playerManager.setMessageInterceptor(
+      cast.framework.messages.MessageType.LOAD,
+      loadRequestData => {
+        const media = loadRequestData.media;
+
+        if (!media || !media.contentId) return loadRequestData;
+
+        // Use your Vercel API URL directly
+        const apiUrl = media.contentId; // e.g., https://cast-friendly.vercel.app/api/stream?url=...
+        console.log("Loading media via API:", apiUrl);
+
+        // HLS.js player for the video
+        if (Hls.isSupported()) {
+          const hls = new Hls();
+          hls.loadSource(apiUrl);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            video.play();
+          });
+        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+          // Native HLS support (Chromecast may support natively)
+          video.src = apiUrl;
+          video.play();
         }
-      );
 
-      context.start();
-    </script>
-  </body>
+        // Return original loadRequestData to continue
+        return loadRequestData;
+      }
+    );
+
+    // Start receiver
+    context.start();
+  </script>
+</body>
 </html>
