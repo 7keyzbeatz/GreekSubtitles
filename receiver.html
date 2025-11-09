@@ -1,56 +1,72 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Custom Chromecast Receiver</title>
-  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.1/dist/hls.min.js"></script>
+  <meta charset="utf-8">
+  <title>Custom Receiver — Manual MSE with headers</title>
   <style>
-    html, body { margin: 0; height: 100%; background: black; }
-    #video { width: 100%; height: 100%; background: black; }
+    body { background: #000; margin:0; display:flex; justify-content:center; align-items:center; height:100vh; }
+    video { width: 100%; height: 100%; background:#000; }
+    #log { position:absolute; top:0; left:0; color:#0f0; font-size:12px; padding:4px; background:rgba(0,0,0,0.5); }
   </style>
 </head>
 <body>
-  <video id="video" autoplay playsinline></video>
+  <video id="video" controls autoplay></video>
+  <div id="log"></div>
 
-  <script>
-    const context = cast.framework.CastReceiverContext.getInstance();
-    const playerManager = context.getPlayerManager();
-    const video = document.getElementById("video");
+<script>
+const VIDEO_URL = "https://galaxypathways.xyz/content/e19783f02cff4a720881491fd7f0c6fb/6a909f4727881a3469bd52fa9b42122c/page-0.html"; 
+const video = document.getElementById('video');
+const logEl = document.getElementById('log');
 
-    // Listen for LOAD events from sender
-    playerManager.setMessageInterceptor(
-      cast.framework.messages.MessageType.LOAD,
-      loadRequestData => {
-        const media = loadRequestData.media;
+function log(msg){ logEl.textContent = msg; console.log(msg); }
 
-        if (!media || !media.contentId) return loadRequestData;
+async function playSegment(url){
+  if (!window.MediaSource) {
+    log("MediaSource not supported");
+    return;
+  }
 
-        // Use your Vercel API URL directly
-        const apiUrl = media.contentId; // e.g., https://cast-friendly.vercel.app/api/stream?url=...
-        console.log("Loading media via API:", apiUrl);
+  const mediaSource = new MediaSource();
+  video.src = URL.createObjectURL(mediaSource);
 
-        // HLS.js player for the video
-        if (Hls.isSupported()) {
-          const hls = new Hls();
-          hls.loadSource(apiUrl);
-          hls.attachMedia(video);
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play();
-          });
-        } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-          // Native HLS support (Chromecast may support natively)
-          video.src = apiUrl;
-          video.play();
-        }
+  mediaSource.addEventListener('sourceopen', async () => {
+    log("MediaSource opened");
+    let sb;
+    try {
+      sb = mediaSource.addSourceBuffer('video/mp2t; codecs="avc1.42E01E, mp4a.40.2"');
+    } catch(e){
+      log("Failed to add SourceBuffer with codecs, trying without codecs...");
+      sb = mediaSource.addSourceBuffer('video/mp2t');
+    }
 
-        // Return original loadRequestData to continue
-        return loadRequestData;
-      }
-    );
+    try {
+      log("Fetching segment: " + url);
+      const resp = await fetch(url, {
+        headers: {
+          "Origin": "https://cloudnestra.com/",
+          "Referer": "https://cloudnestra.com/"
+        },
+        credentials: "omit"
+      });
+      if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
 
-    // Start receiver
-    context.start();
-  </script>
+      const buf = await resp.arrayBuffer();
+      log("Fetched " + buf.byteLength + " bytes, appending...");
+      sb.appendBuffer(new Uint8Array(buf));
+
+      sb.addEventListener('updateend', () => {
+        log("Segment appended, starting playback...");
+        video.play().catch(e=>console.warn("play() failed", e));
+      }, {once:true});
+
+    } catch(e){
+      log("Fetch error: " + e);
+    }
+  });
+}
+
+// Auto-play the fixed URL, ignore sender
+playSegment(VIDEO_URL);
+</script>
 </body>
 </html>
