@@ -2,44 +2,80 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TV Player</title>
+<title>Modern TV Player</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.9/shaka-player.compiled.js"></script>
 <style>
-html, body { margin:0; padding:0; height:100%; background:#111; color:#fff; font-family:Arial,sans-serif; overflow:hidden; }
+html, body { margin:0; padding:0; height:100%; background:#111; font-family:'Roboto',sans-serif; overflow:hidden; }
 #video { width:100%; height:100%; background:black; }
-#controls { position:absolute; bottom:30px; width:100%; display:flex; justify-content:center; align-items:center; gap:40px; }
-.button { background:rgba(0,0,0,0.6); border-radius:10px; padding:20px 30px; font-size:32px; color:white; outline:none; }
-.button:focus { background:#1E88E5; color:#fff; }
-#rewind, #forward { font-size:28px; padding:15px 20px; }
-#topRight { position:absolute; top:30px; right:30px; display:flex; gap:20px; }
-#topRight button { padding:15px 20px; font-size:22px; background:rgba(0,0,0,0.6); border-radius:10px; }
+
+#topRight {
+  position:absolute; top:30px; right:30px; display:flex; gap:20px; z-index:10;
+}
+#topRight button {
+  padding:12px 18px; font-size:22px; background:rgba(0,0,0,0.6); border-radius:12px; color:white; outline:none; cursor:pointer; display:flex; align-items:center; gap:5px;
+}
 #topRight button:focus { background:#FFC107; color:black; }
-#progressContainer { position:absolute; bottom:0; width:100%; height:20px; background:rgba(255,255,255,0.2); }
-#progressBar { height:100%; width:0%; background:#1E88E5; }
-#time { position:absolute; bottom:25px; width:100%; text-align:center; font-size:20px; }
-#qualityMenu { position:absolute; top:70px; right:30px; background:rgba(0,0,0,0.8); border-radius:10px; display:none; flex-direction:column; }
-.qualityOption { padding:10px 20px; font-size:20px; color:white; }
-.qualityOption:focus { background:#FFC107; color:black; }
+
+#controls {
+  position:absolute; bottom:50px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:50px; z-index:10;
+  transition: opacity 0.3s ease;
+}
+.control-btn {
+  width:80px; height:80px; border-radius:40px; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; cursor:pointer; outline:none;
+}
+.control-btn:focus { background:#1E88E5; }
+.control-btn svg { width:40px; height:40px; fill:white; }
+
+#progressContainer {
+  position:absolute; bottom:0; width:100%; height:12px; background:rgba(255,255,255,0.2); z-index:10;
+}
+#progressBar { width:0%; height:100%; background:#1E88E5; transition:width 0.1s linear; }
+
+#time {
+  position:absolute; bottom:20px; width:100%; text-align:center; font-size:20px; color:white; z-index:10;
+}
+
+#qualityMenu, #subsMenu {
+  position:absolute; top:70px; right:30px; background:rgba(0,0,0,0.85); border-radius:12px; display:none; flex-direction:column; z-index:20;
+}
+.menu-btn { padding:12px 20px; font-size:20px; color:white; outline:none; cursor:pointer; margin:3px 0; }
+.menu-btn:focus { background:#FFC107; color:black; }
+
+.fade-out { opacity:0; }
 </style>
 </head>
 <body>
 <video id="video" autoplay></video>
 
 <div id="topRight">
-  <button id="subsBtn">Subs</button>
-  <button id="qualityBtn">Quality</button>
+  <button id="subsBtn">
+    <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>
+    Subs
+  </button>
+  <button id="qualityBtn">
+    <svg viewBox="0 0 24 24"><path d="M4 4h16v16H4z"/></svg>
+    Quality
+  </button>
 </div>
 
 <div id="controls">
-  <button id="rewind" class="button">⏪</button>
-  <button id="playPause" class="button">▶️</button>
-  <button id="forward" class="button">⏩</button>
+  <button id="rewind" class="control-btn">
+    <svg viewBox="0 0 24 24"><path d="M12 8l-8 4 8 4V8zm8 0v8h-2V8h2z"/></svg>
+  </button>
+  <button id="playPause" class="control-btn">
+    <svg id="playIcon" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+    <svg id="pauseIcon" viewBox="0 0 24 24" style="display:none;"><path d="M6 19h4V5H6zm8-14v14h4V5z"/></svg>
+  </button>
+  <button id="forward" class="control-btn">
+    <svg viewBox="0 0 24 24"><path d="M4 8v8h2V8H4zm8 0l8 4-8 4V8z"/></svg>
+  </button>
 </div>
 
 <div id="progressContainer"><div id="progressBar"></div></div>
 <div id="time">00:00 / 00:00</div>
 
 <div id="qualityMenu"></div>
+<div id="subsMenu"></div>
 
 <script>
 const video = document.getElementById('video');
@@ -52,64 +88,103 @@ async function loadVideo(url) {
 }
 loadVideo('http://192.168.2.2:8080/master.m3u8');
 
-// Controls
+// Play/Pause toggle
 const playPause = document.getElementById('playPause');
-playPause.addEventListener('click', ()=>{ video.paused ? video.play() : video.pause(); });
+const playIcon = document.getElementById('playIcon');
+const pauseIcon = document.getElementById('pauseIcon');
+playPause.addEventListener('click', ()=>{
+    if(video.paused){ video.play(); playIcon.style.display='none'; pauseIcon.style.display='block'; }
+    else{ video.pause(); playIcon.style.display='block'; pauseIcon.style.display='none'; }
+});
+
+// Rewind/Forward with hold
 const rewind = document.getElementById('rewind');
 const forward = document.getElementById('forward');
+let step = 5000, interval = null;
 
-let step = 5000; // 5s per press
-rewind.addEventListener('keydown', (e)=>{ if(e.key==="ArrowLeft") video.currentTime = Math.max(0, video.currentTime - step); });
-forward.addEventListener('keydown', (e)=>{ if(e.key==="ArrowRight") video.currentTime = Math.min(video.duration, video.currentTime + step); });
-rewind.addEventListener('click', ()=> video.currentTime = Math.max(0, video.currentTime - step));
-forward.addEventListener('click', ()=> video.currentTime = Math.min(video.duration, video.currentTime + step));
+function startRewind(){ interval=setInterval(()=>{ video.currentTime=Math.max(0, video.currentTime-step); },200); }
+function startForward(){ interval=setInterval(()=>{ video.currentTime=Math.min(video.duration, video.currentTime+step); },200); }
+function stopSkip(){ clearInterval(interval); interval=null; }
 
-// Progress bar
+rewind.addEventListener('mousedown', startRewind);
+rewind.addEventListener('touchstart', startRewind);
+rewind.addEventListener('mouseup', stopSkip);
+rewind.addEventListener('mouseleave', stopSkip);
+rewind.addEventListener('touchend', stopSkip);
+
+forward.addEventListener('mousedown', startForward);
+forward.addEventListener('touchstart', startForward);
+forward.addEventListener('mouseup', stopSkip);
+forward.addEventListener('mouseleave', stopSkip);
+forward.addEventListener('touchend', stopSkip);
+
+// Progress bar & time
 const progressBar = document.getElementById('progressBar');
-const time = document.getElementById('time');
+const timeEl = document.getElementById('time');
 video.addEventListener('timeupdate', ()=>{
     const percent = (video.currentTime/video.duration)*100;
     progressBar.style.width = percent+"%";
     const fmt = (t)=>{ let m=Math.floor(t/60),s=Math.floor(t%60); return `${m<10?'0':''}${m}:${s<10?'0':''}${s}`; }
-    time.textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`;
+    timeEl.textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`;
 });
 
-// Subs toggle
+// Subtitles menu
 const subsBtn = document.getElementById('subsBtn');
-let subsOn = true;
+const subsMenu = document.getElementById('subsMenu');
 subsBtn.addEventListener('click', ()=>{
-    subsOn = !subsOn;
+    subsMenu.innerHTML='';
     const tracks = player.getTextTracks();
-    tracks.forEach(t=>player.selectTextTrack(subsOn ? t : null));
+    if(tracks.length===0){ subsMenu.innerHTML='<div class="menu-btn">No subtitles</div>'; }
+    else{ tracks.forEach(t=>{
+        const btn = document.createElement('button');
+        btn.textContent = t.language;
+        btn.className='menu-btn';
+        btn.tabIndex=0;
+        btn.onclick=()=>{ player.selectTextTrack(t); subsMenu.style.display='none'; };
+        subsMenu.appendChild(btn);
+    }); }
+    subsMenu.style.display='flex';
 });
 
 // Quality menu
 const qualityBtn = document.getElementById('qualityBtn');
 const qualityMenu = document.getElementById('qualityMenu');
 qualityBtn.addEventListener('click', ()=>{
-    qualityMenu.innerHTML = '';
+    qualityMenu.innerHTML='';
     const variants = player.getVariantTracks();
-    variants.forEach((v,i)=>{
-        const btn = document.createElement('button');
-        btn.textContent = `${v.height}p @${Math.round(v.bandwidth/1000)}kbps`;
-        btn.className='qualityOption';
+    variants.forEach(v=>{
+        const btn=document.createElement('button');
+        btn.textContent=`${v.height}p @${Math.round(v.bandwidth/1000)}kbps`;
+        btn.className='menu-btn';
         btn.tabIndex=0;
-        btn.onclick = ()=>{ player.selectVariantTrack(v,true); qualityMenu.style.display='none'; };
+        btn.onclick=()=>{ player.selectVariantTrack(v,true); qualityMenu.style.display='none'; };
         qualityMenu.appendChild(btn);
     });
     qualityMenu.style.display='flex';
 });
 
-// TV remote navigation
-const buttons = Array.from(document.querySelectorAll('.button, #subsBtn, #qualityBtn, .qualityOption'));
-let focusIndex = 0;
-buttons[focusIndex].focus();
+// Remote navigation
+let focusable = Array.from(document.querySelectorAll('.control-btn, #subsBtn, #qualityBtn, .menu-btn'));
+let focusIndex=0;
+focusable[focusIndex].focus();
 
-document.addEventListener('keydown', (e)=>{
-    if(e.key==="ArrowDown"){ focusIndex=(focusIndex+1)%buttons.length; buttons[focusIndex].focus(); }
-    if(e.key==="ArrowUp"){ focusIndex=(focusIndex-1+buttons.length)%buttons.length; buttons[focusIndex].focus(); }
-    if(e.key==="Enter"){ buttons[focusIndex].click(); }
+document.addEventListener('keydown',(e)=>{
+    if(e.key==="ArrowDown"){ focusIndex=(focusIndex+1)%focusable.length; focusable[focusIndex].focus(); }
+    if(e.key==="ArrowUp"){ focusIndex=(focusIndex-1+focusable.length)%focusable.length; focusable[focusIndex].focus(); }
+    if(e.key==="Enter"){ focusable[focusIndex].click(); }
 });
+
+// Auto-hide controls
+const controls = document.getElementById('controls');
+let fadeTimeout=null;
+function showControls(){
+    controls.style.opacity=1;
+    clearTimeout(fadeTimeout);
+    fadeTimeout=setTimeout(()=>controls.style.opacity=0,5000);
+}
+video.addEventListener('mousemove', showControls);
+video.addEventListener('keydown', showControls);
+showControls();
 </script>
 </body>
 </html>
