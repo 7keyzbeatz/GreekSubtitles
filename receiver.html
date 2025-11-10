@@ -1,106 +1,135 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Custom Cast Receiver</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.9/shaka-player.compiled.js"></script>
-  <style>
-    html, body {
-      margin: 0;
-      height: 100%;
-      background-color: #111;
-      color: white;
-      font-family: Arial, sans-serif;
-      overflow: hidden;
-    }
-    #video {
-      width: 100%;
-      height: 100%;
-      background-color: black;
-    }
-    #controls {
-      position: absolute;
-      bottom: 20px;
-      left: 20px;
-      display: flex;
-      gap: 10px;
-    }
-    button {
-      padding: 10px 20px;
-      border: none;
-      border-radius: 5px;
-      background-color: #1E88E5;
-      color: white;
-      font-size: 16px;
-      cursor: pointer;
-    }
-    #info {
-      position: absolute;
-      top: 20px;
-      left: 20px;
-      max-width: 70%;
-      background-color: rgba(0,0,0,0.5);
-      padding: 10px;
-      border-radius: 5px;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>TV Cast Receiver</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.9/shaka-player.compiled.js"></script>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background-color: #111;
+    color: #fff;
+    font-family: 'Roboto', sans-serif;
+  }
+
+  #video {
+    width: 100%;
+    height: 100%;
+    background: black;
+  }
+
+  #overlay {
+    position: absolute;
+    bottom: 50px;
+    left: 50px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .tv-btn {
+    font-size: 28px;
+    padding: 20px 40px;
+    background-color: #1E88E5;
+    border-radius: 15px;
+    outline: none;
+    color: white;
+  }
+
+  .tv-btn:focus {
+    background-color: #FFC107;
+    color: black;
+  }
+
+  #info {
+    position: absolute;
+    top: 50px;
+    left: 50px;
+    background-color: rgba(0,0,0,0.6);
+    padding: 15px;
+    border-radius: 10px;
+    max-width: 80%;
+  }
+
+  #info h2 {
+    margin: 0 0 5px 0;
+  }
+</style>
 </head>
 <body>
-  <video id="video" autoplay controls></video>
+  <video id="video" autoplay></video>
+
   <div id="info">
-    <h3 id="title">Title</h3>
-    <p id="description">Description</p>
+    <h2 id="title">Video Title</h2>
+    <p id="description">Video description goes here</p>
   </div>
-  <div id="controls">
-    <button id="toggleSub">Subtitles ON/OFF</button>
-    <button id="qualityBtn">Change Quality</button>
+
+  <div id="overlay">
+    <button class="tv-btn" id="playPause">Play/Pause</button>
+    <button class="tv-btn" id="toggleSub">Subtitles ON/OFF</button>
+    <button class="tv-btn" id="qualityBtn">Change Quality</button>
   </div>
 
   <script>
     const video = document.getElementById('video');
     const titleEl = document.getElementById('title');
     const descEl = document.getElementById('description');
-    const toggleSubBtn = document.getElementById('toggleSub');
-    const qualityBtn = document.getElementById('qualityBtn');
 
-    // Shaka Player setup
     const player = new shaka.Player(video);
 
-    player.addEventListener('error', (e) => console.error('Shaka error', e.detail));
+    player.addEventListener('error', (e) => console.error('Error code', e.detail));
 
-    async function loadVideo(url, title = "Video Title", description = "Video Description") {
+    async function loadVideo(url, title="Title", desc="Description") {
       titleEl.textContent = title;
-      descEl.textContent = description;
+      descEl.textContent = desc;
       try {
-        await player.load(url); // works with HLS/DASH/MP4
+        await player.load(url);
         console.log('Video loaded');
       } catch(e) {
-        console.error('Error loading video', e);
+        console.error('Failed to load', e);
       }
     }
 
+    loadVideo('http://192.168.2.2:8080/master.m3u8', 'My Stream', 'Awesome TV stream');
+
+    // Play/Pause toggle
+    const playPauseBtn = document.getElementById('playPause');
+    playPauseBtn.addEventListener('click', () => {
+      if(video.paused) video.play();
+      else video.pause();
+    });
+
     // Subtitles toggle
-    let subtitlesOn = true;
+    let subsOn = true;
+    const toggleSubBtn = document.getElementById('toggleSub');
     toggleSubBtn.addEventListener('click', () => {
-      subtitlesOn = !subtitlesOn;
+      subsOn = !subsOn;
       const tracks = player.getTextTracks();
-      tracks.forEach((t) => player.selectTextTrack(subtitlesOn ? t : null));
+      tracks.forEach(t => player.selectTextTrack(subsOn ? t : null));
     });
 
     // Quality selection
+    const qualityBtn = document.getElementById('qualityBtn');
     qualityBtn.addEventListener('click', () => {
       const variants = player.getVariantTracks();
-      console.log('Available qualities:', variants);
-      const qualityMenu = variants.map((v, i) => `${i}: ${v.height}p @${v.bandwidth}bps`).join('\n');
-      const choice = prompt("Choose quality:\n" + qualityMenu);
+      const list = variants.map((v,i)=>`${i}: ${v.height}p @${v.bandwidth}bps`).join('\n');
+      const choice = prompt("Choose quality:\n"+list);
       const index = parseInt(choice);
-      if (!isNaN(index) && variants[index]) {
-        player.selectVariantTrack(variants[index], /* clearBuffer */ true);
-      }
+      if(!isNaN(index) && variants[index]) player.selectVariantTrack(variants[index], true);
     });
 
-    // Example load
-    loadVideo('http://192.168.2.2:8080/master.m3u8', "My Stream", "Custom Chromecast Receiver Example");
+    // Make buttons navigable via remote D-pad
+    const buttons = Array.from(document.querySelectorAll('.tv-btn'));
+    let focusIndex = 0;
+    buttons[focusIndex].focus();
+
+    document.addEventListener('keydown', (e) => {
+      if(e.key === "ArrowDown") { focusIndex = (focusIndex+1) % buttons.length; buttons[focusIndex].focus(); }
+      if(e.key === "ArrowUp") { focusIndex = (focusIndex-1+buttons.length) % buttons.length; buttons[focusIndex].focus(); }
+      if(e.key === "Enter") { buttons[focusIndex].click(); }
+    });
   </script>
 </body>
 </html>
