@@ -1,72 +1,106 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>Custom Receiver — Manual MSE with headers</title>
+  <meta charset="UTF-8">
+  <title>Custom Cast Receiver</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.9/shaka-player.compiled.js"></script>
   <style>
-    body { background: #000; margin:0; display:flex; justify-content:center; align-items:center; height:100vh; }
-    video { width: 100%; height: 100%; background:#000; }
-    #log { position:absolute; top:0; left:0; color:#0f0; font-size:12px; padding:4px; background:rgba(0,0,0,0.5); }
+    html, body {
+      margin: 0;
+      height: 100%;
+      background-color: #111;
+      color: white;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    #video {
+      width: 100%;
+      height: 100%;
+      background-color: black;
+    }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      background-color: #1E88E5;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #info {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      max-width: 70%;
+      background-color: rgba(0,0,0,0.5);
+      padding: 10px;
+      border-radius: 5px;
+    }
   </style>
 </head>
 <body>
-  <video id="video" controls autoplay></video>
-  <div id="log"></div>
+  <video id="video" autoplay controls></video>
+  <div id="info">
+    <h3 id="title">Title</h3>
+    <p id="description">Description</p>
+  </div>
+  <div id="controls">
+    <button id="toggleSub">Subtitles ON/OFF</button>
+    <button id="qualityBtn">Change Quality</button>
+  </div>
 
-<script>
-const VIDEO_URL = "https://galaxypathways.xyz/content/e19783f02cff4a720881491fd7f0c6fb/6a909f4727881a3469bd52fa9b42122c/page-0.html"; 
-const video = document.getElementById('video');
-const logEl = document.getElementById('log');
+  <script>
+    const video = document.getElementById('video');
+    const titleEl = document.getElementById('title');
+    const descEl = document.getElementById('description');
+    const toggleSubBtn = document.getElementById('toggleSub');
+    const qualityBtn = document.getElementById('qualityBtn');
 
-function log(msg){ logEl.textContent = msg; console.log(msg); }
+    // Shaka Player setup
+    const player = new shaka.Player(video);
 
-async function playSegment(url){
-  if (!window.MediaSource) {
-    log("MediaSource not supported");
-    return;
-  }
+    player.addEventListener('error', (e) => console.error('Shaka error', e.detail));
 
-  const mediaSource = new MediaSource();
-  video.src = URL.createObjectURL(mediaSource);
-
-  mediaSource.addEventListener('sourceopen', async () => {
-    log("MediaSource opened");
-    let sb;
-    try {
-      sb = mediaSource.addSourceBuffer('video/mp2t; codecs="avc1.42E01E, mp4a.40.2"');
-    } catch(e){
-      log("Failed to add SourceBuffer with codecs, trying without codecs...");
-      sb = mediaSource.addSourceBuffer('video/mp2t');
+    async function loadVideo(url, title = "Video Title", description = "Video Description") {
+      titleEl.textContent = title;
+      descEl.textContent = description;
+      try {
+        await player.load(url); // works with HLS/DASH/MP4
+        console.log('Video loaded');
+      } catch(e) {
+        console.error('Error loading video', e);
+      }
     }
 
-    try {
-      log("Fetching segment: " + url);
-      const resp = await fetch(url, {
-        headers: {
-          "Origin": "https://cloudnestra.com/",
-          "Referer": "https://cloudnestra.com/"
-        },
-        credentials: "omit"
-      });
-      if (!resp.ok) throw new Error(resp.status + " " + resp.statusText);
+    // Subtitles toggle
+    let subtitlesOn = true;
+    toggleSubBtn.addEventListener('click', () => {
+      subtitlesOn = !subtitlesOn;
+      const tracks = player.getTextTracks();
+      tracks.forEach((t) => player.selectTextTrack(subtitlesOn ? t : null));
+    });
 
-      const buf = await resp.arrayBuffer();
-      log("Fetched " + buf.byteLength + " bytes, appending...");
-      sb.appendBuffer(new Uint8Array(buf));
+    // Quality selection
+    qualityBtn.addEventListener('click', () => {
+      const variants = player.getVariantTracks();
+      console.log('Available qualities:', variants);
+      const qualityMenu = variants.map((v, i) => `${i}: ${v.height}p @${v.bandwidth}bps`).join('\n');
+      const choice = prompt("Choose quality:\n" + qualityMenu);
+      const index = parseInt(choice);
+      if (!isNaN(index) && variants[index]) {
+        player.selectVariantTrack(variants[index], /* clearBuffer */ true);
+      }
+    });
 
-      sb.addEventListener('updateend', () => {
-        log("Segment appended, starting playback...");
-        video.play().catch(e=>console.warn("play() failed", e));
-      }, {once:true});
-
-    } catch(e){
-      log("Fetch error: " + e);
-    }
-  });
-}
-
-// Auto-play the fixed URL, ignore sender
-playSegment(VIDEO_URL);
-</script>
+    // Example load
+    loadVideo('http://192.168.2.2:8080/master.m3u8', "My Stream", "Custom Chromecast Receiver Example");
+  </script>
 </body>
 </html>
