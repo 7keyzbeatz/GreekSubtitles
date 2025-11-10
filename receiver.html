@@ -2,134 +2,114 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>TV Cast Receiver</title>
+<title>TV Player</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/shaka-player/4.3.9/shaka-player.compiled.js"></script>
 <style>
-  html, body {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-    background-color: #111;
-    color: #fff;
-    font-family: 'Roboto', sans-serif;
-  }
-
-  #video {
-    width: 100%;
-    height: 100%;
-    background: black;
-  }
-
-  #overlay {
-    position: absolute;
-    bottom: 50px;
-    left: 50px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-  }
-
-  .tv-btn {
-    font-size: 28px;
-    padding: 20px 40px;
-    background-color: #1E88E5;
-    border-radius: 15px;
-    outline: none;
-    color: white;
-  }
-
-  .tv-btn:focus {
-    background-color: #FFC107;
-    color: black;
-  }
-
-  #info {
-    position: absolute;
-    top: 50px;
-    left: 50px;
-    background-color: rgba(0,0,0,0.6);
-    padding: 15px;
-    border-radius: 10px;
-    max-width: 80%;
-  }
-
-  #info h2 {
-    margin: 0 0 5px 0;
-  }
+html, body { margin:0; padding:0; height:100%; background:#111; color:#fff; font-family:Arial,sans-serif; overflow:hidden; }
+#video { width:100%; height:100%; background:black; }
+#controls { position:absolute; bottom:30px; width:100%; display:flex; justify-content:center; align-items:center; gap:40px; }
+.button { background:rgba(0,0,0,0.6); border-radius:10px; padding:20px 30px; font-size:32px; color:white; outline:none; }
+.button:focus { background:#1E88E5; color:#fff; }
+#rewind, #forward { font-size:28px; padding:15px 20px; }
+#topRight { position:absolute; top:30px; right:30px; display:flex; gap:20px; }
+#topRight button { padding:15px 20px; font-size:22px; background:rgba(0,0,0,0.6); border-radius:10px; }
+#topRight button:focus { background:#FFC107; color:black; }
+#progressContainer { position:absolute; bottom:0; width:100%; height:20px; background:rgba(255,255,255,0.2); }
+#progressBar { height:100%; width:0%; background:#1E88E5; }
+#time { position:absolute; bottom:25px; width:100%; text-align:center; font-size:20px; }
+#qualityMenu { position:absolute; top:70px; right:30px; background:rgba(0,0,0,0.8); border-radius:10px; display:none; flex-direction:column; }
+.qualityOption { padding:10px 20px; font-size:20px; color:white; }
+.qualityOption:focus { background:#FFC107; color:black; }
 </style>
 </head>
 <body>
-  <video id="video" autoplay></video>
+<video id="video" autoplay></video>
 
-  <div id="info">
-    <h2 id="title">Video Title</h2>
-    <p id="description">Video description goes here</p>
-  </div>
+<div id="topRight">
+  <button id="subsBtn">Subs</button>
+  <button id="qualityBtn">Quality</button>
+</div>
 
-  <div id="overlay">
-    <button class="tv-btn" id="playPause">Play/Pause</button>
-    <button class="tv-btn" id="toggleSub">Subtitles ON/OFF</button>
-    <button class="tv-btn" id="qualityBtn">Change Quality</button>
-  </div>
+<div id="controls">
+  <button id="rewind" class="button">⏪</button>
+  <button id="playPause" class="button">▶️</button>
+  <button id="forward" class="button">⏩</button>
+</div>
 
-  <script>
-    const video = document.getElementById('video');
-    const titleEl = document.getElementById('title');
-    const descEl = document.getElementById('description');
+<div id="progressContainer"><div id="progressBar"></div></div>
+<div id="time">00:00 / 00:00</div>
 
-    const player = new shaka.Player(video);
+<div id="qualityMenu"></div>
 
-    player.addEventListener('error', (e) => console.error('Error code', e.detail));
+<script>
+const video = document.getElementById('video');
+const player = new shaka.Player(video);
 
-    async function loadVideo(url, title="Title", desc="Description") {
-      titleEl.textContent = title;
-      descEl.textContent = desc;
-      try {
-        await player.load(url);
-        console.log('Video loaded');
-      } catch(e) {
-        console.error('Failed to load', e);
-      }
-    }
+// Load video
+async function loadVideo(url) {
+    try { await player.load(url); } 
+    catch(e){ console.error(e); }
+}
+loadVideo('http://192.168.2.2:8080/master.m3u8');
 
-    loadVideo('http://192.168.2.2:8080/master.m3u8', 'My Stream', 'Awesome TV stream');
+// Controls
+const playPause = document.getElementById('playPause');
+playPause.addEventListener('click', ()=>{ video.paused ? video.play() : video.pause(); });
+const rewind = document.getElementById('rewind');
+const forward = document.getElementById('forward');
 
-    // Play/Pause toggle
-    const playPauseBtn = document.getElementById('playPause');
-    playPauseBtn.addEventListener('click', () => {
-      if(video.paused) video.play();
-      else video.pause();
+let step = 5000; // 5s per press
+rewind.addEventListener('keydown', (e)=>{ if(e.key==="ArrowLeft") video.currentTime = Math.max(0, video.currentTime - step); });
+forward.addEventListener('keydown', (e)=>{ if(e.key==="ArrowRight") video.currentTime = Math.min(video.duration, video.currentTime + step); });
+rewind.addEventListener('click', ()=> video.currentTime = Math.max(0, video.currentTime - step));
+forward.addEventListener('click', ()=> video.currentTime = Math.min(video.duration, video.currentTime + step));
+
+// Progress bar
+const progressBar = document.getElementById('progressBar');
+const time = document.getElementById('time');
+video.addEventListener('timeupdate', ()=>{
+    const percent = (video.currentTime/video.duration)*100;
+    progressBar.style.width = percent+"%";
+    const fmt = (t)=>{ let m=Math.floor(t/60),s=Math.floor(t%60); return `${m<10?'0':''}${m}:${s<10?'0':''}${s}`; }
+    time.textContent = `${fmt(video.currentTime)} / ${fmt(video.duration)}`;
+});
+
+// Subs toggle
+const subsBtn = document.getElementById('subsBtn');
+let subsOn = true;
+subsBtn.addEventListener('click', ()=>{
+    subsOn = !subsOn;
+    const tracks = player.getTextTracks();
+    tracks.forEach(t=>player.selectTextTrack(subsOn ? t : null));
+});
+
+// Quality menu
+const qualityBtn = document.getElementById('qualityBtn');
+const qualityMenu = document.getElementById('qualityMenu');
+qualityBtn.addEventListener('click', ()=>{
+    qualityMenu.innerHTML = '';
+    const variants = player.getVariantTracks();
+    variants.forEach((v,i)=>{
+        const btn = document.createElement('button');
+        btn.textContent = `${v.height}p @${Math.round(v.bandwidth/1000)}kbps`;
+        btn.className='qualityOption';
+        btn.tabIndex=0;
+        btn.onclick = ()=>{ player.selectVariantTrack(v,true); qualityMenu.style.display='none'; };
+        qualityMenu.appendChild(btn);
     });
+    qualityMenu.style.display='flex';
+});
 
-    // Subtitles toggle
-    let subsOn = true;
-    const toggleSubBtn = document.getElementById('toggleSub');
-    toggleSubBtn.addEventListener('click', () => {
-      subsOn = !subsOn;
-      const tracks = player.getTextTracks();
-      tracks.forEach(t => player.selectTextTrack(subsOn ? t : null));
-    });
+// TV remote navigation
+const buttons = Array.from(document.querySelectorAll('.button, #subsBtn, #qualityBtn, .qualityOption'));
+let focusIndex = 0;
+buttons[focusIndex].focus();
 
-    // Quality selection
-    const qualityBtn = document.getElementById('qualityBtn');
-    qualityBtn.addEventListener('click', () => {
-      const variants = player.getVariantTracks();
-      const list = variants.map((v,i)=>`${i}: ${v.height}p @${v.bandwidth}bps`).join('\n');
-      const choice = prompt("Choose quality:\n"+list);
-      const index = parseInt(choice);
-      if(!isNaN(index) && variants[index]) player.selectVariantTrack(variants[index], true);
-    });
-
-    // Make buttons navigable via remote D-pad
-    const buttons = Array.from(document.querySelectorAll('.tv-btn'));
-    let focusIndex = 0;
-    buttons[focusIndex].focus();
-
-    document.addEventListener('keydown', (e) => {
-      if(e.key === "ArrowDown") { focusIndex = (focusIndex+1) % buttons.length; buttons[focusIndex].focus(); }
-      if(e.key === "ArrowUp") { focusIndex = (focusIndex-1+buttons.length) % buttons.length; buttons[focusIndex].focus(); }
-      if(e.key === "Enter") { buttons[focusIndex].click(); }
-    });
-  </script>
+document.addEventListener('keydown', (e)=>{
+    if(e.key==="ArrowDown"){ focusIndex=(focusIndex+1)%buttons.length; buttons[focusIndex].focus(); }
+    if(e.key==="ArrowUp"){ focusIndex=(focusIndex-1+buttons.length)%buttons.length; buttons[focusIndex].focus(); }
+    if(e.key==="Enter"){ buttons[focusIndex].click(); }
+});
+</script>
 </body>
 </html>
