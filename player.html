@@ -108,6 +108,10 @@ let hls = null;
 let dash = null;
 let hudTimer = null;
 
+// 🔁 για resume από το ίδιο σημείο
+let lastGoodTime = 0;
+let isRecovering = false;
+
 function fmt(t){
   if(!isFinite(t)) return "0:00";
   t = Math.floor(t);
@@ -122,7 +126,10 @@ function fmt(t){
 function showHud(){
   hud.classList.add("show");
   clearTimeout(hudTimer);
-  hudTimer = setTimeout(()=>hud.classList.remove("show"), 3000);
+  hudTimer = setTimeout(()=>{
+    hud.classList.remove("show");
+    preview.classList.remove("show");
+  }, 3000);
 }
 
 function reset(){
@@ -132,6 +139,7 @@ function reset(){
   v.removeAttribute("src");
   v.load();
   v.querySelectorAll("track").forEach(t=>t.remove());
+  lastGoodTime = 0;
 }
 
 function addSubs(url){
@@ -159,6 +167,15 @@ function loadStream(url, subUrl){
     hls = new Hls();
     hls.loadSource(url);
     hls.attachMedia(v);
+
+    // fatal error recover
+    hls.on(Hls.Events.ERROR,(evt,data)=>{
+      if(data.fatal){
+        console.log("[HLS] fatal – recoverMediaError");
+        try{ hls.recoverMediaError(); }catch(e){}
+      }
+    });
+
     hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
       addSubs(subUrl);
       v.play().catch(()=>{});
@@ -186,7 +203,52 @@ v.addEventListener("timeupdate",()=>{
   fill.style.width = p+"%";
   cur.textContent = fmt(v.currentTime);
   dur.textContent = fmt(v.duration);
+
+  // κρατάμε πάντα το τελευταίο καλό σημείο
+  if(!isNaN(v.currentTime) && v.currentTime > 0){
+    lastGoodTime = v.currentTime;
+  }
 });
+
+/* 🔁 SMART RECOVER ΧΩΡΙΣ ΝΑ ΠΗΓΑΙΝΕΙ ΣΤΗΝ ΑΡΧΗ */
+setInterval(()=>{
+  if(!v.src || isRecovering) return;
+
+  // stuck εάν δεν είναι paused και δεν έχει data loaded
+  if(!v.paused && v.readyState < 2){
+    console.log("[RECOVER] freeze detected @", lastGoodTime);
+    doRecover();
+  }
+}, 2500);
+
+["stalled","waiting","error"].forEach(evt=>{
+  v.addEventListener(evt, ()=>{
+    if(isRecovering || !v.src) return;
+    console.log("[RECOVER] event:", evt, "@", lastGoodTime);
+    doRecover();
+  });
+});
+
+function doRecover(){
+  isRecovering = true;
+  const t = lastGoodTime;
+  const src = v.currentSrc || v.src;
+  if(!src){
+    isRecovering = false;
+    return;
+  }
+
+  // για HLS / DASH αφήνουμε τον player, απλά reload στο video tag
+  v.src = src;
+  v.load();
+
+  v.onloadedmetadata = ()=>{
+    v.currentTime = t || 0;
+    v.play().catch(()=>{});
+    isRecovering = false;
+    showHud();
+  };
+}
 
 /* Seeking */
 function seek(delta){
@@ -219,29 +281,41 @@ function stopVideo(){
 /* Remote input */
 function remote(key){
   showHud();
+  console.log("[REMOTE_KEY]", key);
 
   switch(key){
 
+    // ⏪ / ⏩  + D-Pad left/right + διάφορα remotes
     case "ArrowLeft":
+    case "Left":
     case "MediaPreviousTrack":
     case "MediaTrackPrevious":
     case "ChannelDown":
+    case "MediaRewind":
+    case "SeekBackward":
       seek(-10);
       break;
 
     case "ArrowRight":
+    case "Right":
     case "MediaNextTrack":
     case "MediaTrackNext":
     case "ChannelUp":
+    case "MediaFastForward":
+    case "SeekForward":
       seek(10);
       break;
 
+    // play / pause
     case "Enter":
     case "MediaPlayPause":
+    case "MediaPlay":
+    case "MediaPause":
     case " ":
       togglePlay();
       break;
 
+    // stop (αν το υποστηρίζει το remote)
     case "MediaStop":
       stopVideo();
       break;
@@ -259,7 +333,7 @@ window.addEventListener("message",e=>{
   }
 });
 
-/* debug with keyboard in browser */
+/* debug με keyboard σε browser */
 document.addEventListener("keydown",e=>remote(e.key));
 </script>
 </body>
