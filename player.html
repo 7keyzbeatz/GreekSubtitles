@@ -305,3 +305,315 @@ bMute.onclick=()=>{video.muted=!video.muted;bMute.textContent=video.muted?"🔇"
 </script>
 </body>
 </html>
+α<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>GRMF Netflix Player</title>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+
+<style>
+html,body{
+  margin:0;height:100%;width:100%;
+  background:#000;font-family:Arial,system-ui;
+  overflow:hidden;
+}
+video{
+  width:100%;height:100%;object-fit:contain;background:#000;
+}
+.overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,.9),transparent 60%);
+  display:flex;flex-direction:column;justify-content:flex-end;
+  opacity:0;pointer-events:none;transition:.25s;
+}
+.overlay.show{opacity:1;pointer-events:auto}
+
+/* Title */
+.title{
+  position:absolute;top:30px;left:0;right:0;
+  text-align:center;color:#fff;font-size:20px;font-weight:bold;
+}
+
+/* Center Controls */
+.center-controls{
+  display:flex;justify-content:center;align-items:center;
+  gap:40px;margin-bottom:40px;
+}
+.cc-btn{
+  color:white;font-size:48px;
+  background:none;border:none;
+  transform:scale(1);transition:.15s;
+}
+.cc-btn.focus{
+  transform:scale(1.25);
+  text-shadow:0 0 20px rgba(255,255,255,.8);
+}
+
+/* Seek bar */
+.seek-wrap{padding:0 60px 20px}
+.seek-bar{
+  height:6px;border-radius:999px;background:#333;
+  position:relative;
+}
+.seek-fill{
+  height:100%;width:0%;
+  background:red;border-radius:999px;
+}
+.seek-thumb{
+  position:absolute;top:50%;
+  width:16px;height:16px;
+  background:red;border-radius:50%;
+  transform:translate(-50%,-50%) scale(0);
+  transition:.15s;
+}
+.seek-thumb.show{transform:translate(-50%,-50%) scale(1.2)}
+
+.time-row{
+  display:flex;justify-content:space-between;
+  color:white;font-size:12px;margin-top:6px;
+}
+
+/* Bottom right buttons */
+.side-controls{
+  position:absolute;right:40px;bottom:40px;
+  display:flex;gap:20px;
+}
+.side-btn{
+  background:#111;color:white;
+  padding:10px 20px;border-radius:30px;
+  font-size:14px;border:1px solid #444;
+}
+.side-btn.focus{
+  outline:3px solid yellow;
+}
+
+/* Quality menu */
+.menu{
+  position:absolute;right:40px;bottom:100px;
+  background:#111;border:1px solid #444;
+  border-radius:12px;padding:10px;display:none;
+}
+.menu div{
+  color:white;padding:6px 14px;border-radius:8px;
+}
+.menu .active{
+  background:yellow;color:black;
+}
+</style>
+</head>
+<body>
+
+<video id="video"></video>
+
+<div id="overlay" class="overlay">
+  <div class="title" id="titleText"></div>
+
+  <div class="center-controls">
+    <button id="btnBack" class="cc-btn">⏪</button>
+    <button id="btnPlay" class="cc-btn">⏸</button>
+    <button id="btnFwd" class="cc-btn">⏩</button>
+  </div>
+
+  <div class="seek-wrap">
+    <div id="seekBar" class="seek-bar">
+      <div id="seekFill" class="seek-fill"></div>
+      <div id="seekThumb" class="seek-thumb"></div>
+    </div>
+    <div class="time-row">
+      <div id="curTime">0:00</div>
+      <div id="durTime">0:00</div>
+    </div>
+  </div>
+
+  <div class="side-controls">
+    <div id="btnSubs" class="side-btn">SUBS</div>
+    <div id="btnQuality" class="side-btn">QUALITY</div>
+  </div>
+</div>
+
+<div id="qMenu" class="menu"></div>
+
+<script>
+const video = document.getElementById("video");
+const overlay = document.getElementById("overlay");
+const titleText = document.getElementById("titleText");
+
+const btnBack = document.getElementById("btnBack");
+const btnPlay = document.getElementById("btnPlay");
+const btnFwd  = document.getElementById("btnFwd");
+const btnSubs = document.getElementById("btnSubs");
+const btnQuality = document.getElementById("btnQuality");
+
+const seekBar = document.getElementById("seekBar");
+const seekFill = document.getElementById("seekFill");
+const seekThumb = document.getElementById("seekThumb");
+
+const curTime = document.getElementById("curTime");
+const durTime = document.getElementById("durTime");
+
+const qMenu = document.getElementById("qMenu");
+
+let hls=null;
+let seekMode=false;
+let seekPos=0;
+
+let focusGroup="center"; 
+let centerBtns=[btnBack,btnPlay,btnFwd];
+let sideBtns=[btnSubs,btnQuality];
+let cIndex=1;
+let sIndex=-1;
+
+let qList=[],qIndex=0,qOpen=false;
+let subsOn=true;
+
+function fmt(t){
+  if(!t||isNaN(t)) return "0:00";
+  const m=Math.floor(t/60);
+  const s=Math.floor(t%60).toString().padStart(2,"0");
+  return `${m}:${s}`;
+}
+
+function showUI(){
+  overlay.classList.add("show");
+}
+
+function loadStream(url,subUrl,title){
+  titleText.textContent=title||"";
+  if(url.includes(".m3u8") && Hls.isSupported()){
+    hls=new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_LOADED,(e,d)=>{
+      qMenu.innerHTML="";
+      qList=[{label:"AUTO",level:-1}];
+      d.levels.forEach((l,i)=>{
+        qList.push({label:`${l.height}p`,level:i});
+      });
+      qList.forEach(q=>{
+        const div=document.createElement("div");
+        div.textContent=q.label;
+        qMenu.appendChild(div);
+      });
+    });
+  }else{
+    video.src=url;
+  }
+
+  if(subUrl){
+    const t=document.createElement("track");
+    t.kind="subtitles";
+    t.src=subUrl;
+    t.default=true;
+    video.appendChild(t);
+  }
+
+  video.play();
+  showUI();
+}
+
+window.addEventListener("message",e=>{
+  const d=e.data||{};
+  if(d.type==="LOAD_STREAM"){
+    loadStream(d.url,d.subUrl,d.subLabel);
+  }
+});
+
+function updateSeekUI(){
+  if(!video.duration) return;
+  const pct=(video.currentTime/video.duration)*100;
+  seekFill.style.width=pct+"%";
+  curTime.textContent=fmt(video.currentTime);
+  durTime.textContent=fmt(video.duration);
+}
+
+video.addEventListener("timeupdate",updateSeekUI);
+
+function refreshFocus(){
+  centerBtns.forEach(b=>b.classList.remove("focus"));
+  sideBtns.forEach(b=>b.classList.remove("focus"));
+  seekThumb.classList.remove("show");
+
+  if(focusGroup==="center") centerBtns[cIndex].classList.add("focus");
+  else if(focusGroup==="side") sideBtns[sIndex].classList.add("focus");
+  else if(focusGroup==="seek") seekThumb.classList.add("show");
+}
+
+document.addEventListener("keydown",e=>{
+  showUI();
+
+  const k=e.key;
+
+  if(k==="ArrowUp"){
+    if(focusGroup==="center"){
+      focusGroup="seek";
+      seekMode=true;
+      seekPos=video.currentTime;
+    }else if(focusGroup==="side"){
+      focusGroup="center";
+      cIndex=1;
+    }
+    refreshFocus();
+  }
+
+  if(k==="ArrowDown"){
+    if(focusGroup==="seek"){
+      focusGroup="center";
+      seekMode=false;
+    }else if(focusGroup==="center"){
+      focusGroup="side";
+      sIndex=0;
+    }
+    refreshFocus();
+  }
+
+  if(k==="ArrowLeft"){
+    if(focusGroup==="center"){
+      cIndex=Math.max(0,cIndex-1);
+    }else if(focusGroup==="seek"){
+      seekPos=Math.max(0,seekPos-10);
+      video.currentTime=seekPos;
+    }else if(focusGroup==="side"){
+      sIndex=Math.max(0,sIndex-1);
+    }
+    refreshFocus();
+  }
+
+  if(k==="ArrowRight"){
+    if(focusGroup==="center"){
+      cIndex=Math.min(2,cIndex+1);
+    }else if(focusGroup==="seek"){
+      seekPos=Math.min(video.duration,seekPos+10);
+      video.currentTime=seekPos;
+    }else if(focusGroup==="side"){
+      sIndex=Math.min(1,sIndex+1);
+    }
+    refreshFocus();
+  }
+
+  if(k==="Enter"){
+    if(focusGroup==="center"){
+      if(cIndex===0) video.currentTime-=10;
+      if(cIndex===1) video.paused?video.play():video.pause();
+      if(cIndex===2) video.currentTime+=10;
+    }else if(focusGroup==="side"){
+      if(sIndex===0){
+        subsOn=!subsOn;
+        video.textTracks[0].mode=subsOn?"showing":"disabled";
+      }
+      if(sIndex===1){
+        qOpen=!qOpen;
+        qMenu.style.display=qOpen?"block":"none";
+      }
+    }
+  }
+});
+
+/* R1/L1 */
+document.addEventListener("keydown",e=>{
+  if(e.key==="MediaNextTrack"||e.key==="ChannelUp") video.currentTime+=10;
+  if(e.key==="MediaPreviousTrack"||e.key==="ChannelDown") video.currentTime-=10;
+});
+</script>
+</body>
+</html>
