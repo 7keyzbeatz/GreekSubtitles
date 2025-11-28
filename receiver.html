@@ -41,19 +41,18 @@ context.addCustomMessageListener(NAMESPACE, (event) => {
       type: 'LOAD_STREAM',
       url: data.url,
       subUrl: data.subUrl,
-      subLabel: data.subLabel,
-      headers: data.headers || {}
+      subLabel: data.subLabel
     }, '*');
 
-  } catch (e) {
-    console.log("Receiver parse error", e);
-  }
+  } catch (e) {}
 });
 
-// Remote key forwarding
+// Better remote key forwarding (key + keyCode)
 document.addEventListener('keydown', (e) => {
+
   let key = e.key;
 
+  // Map keyCodes (for TV remotes)
   switch (e.keyCode) {
     case 415: key = 'MediaPlayPause'; break;
     case 413: key = 'MediaPlay'; break;
