@@ -258,9 +258,42 @@ window.addEventListener("message",e=>{
     remote(d.key);
   }
 });
-
+  
 /* debug with keyboard in browser */
 document.addEventListener("keydown",e=>remote(e.key));
+
+// 1. Πες στον Chromecast ότι υπάρχει πάντα "κάτι" ενεργό
+setInterval(()=>{
+  try{
+    if(v && v.src){
+      // fake activity ping
+      v.play().catch(()=>{});
+    }
+  }catch(e){}
+}, 5000);
+
+// 2. Αν παγώσει τελείως το video, ξαναφόρτωσέ το
+let lastTime = 0;
+setInterval(()=>{
+  if(!v || !v.src || !v.duration) return;
+
+  if(!v.paused && v.currentTime === lastTime){
+    console.log("⚠️ Freeze detected — soft reload");
+    const src = v.currentSrc || v.src;
+    const t = v.currentTime;
+
+    v.src = src;
+    v.load();
+
+    v.onloadedmetadata = ()=>{
+      v.currentTime = t;
+      v.play().catch(()=>{});
+    };
+  }
+
+  lastTime = v.currentTime;
+},3000);
+  
 </script>
 </body>
 </html>
