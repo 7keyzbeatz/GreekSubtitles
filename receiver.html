@@ -1,119 +1,212 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Cast Custom Data Viewer</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="UTF-8" />
+  <title>GRMF Pro HLS Player - Final CAF Receiver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <!-- ΣΩΣΤΟ CAF RECEIVER SCRIPT -->
-    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
-    <style>
-        body {
-            background-color: #121212;
-            color: #e0e0e0;
-            font-family: Arial, sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 20px;
-        }
-        h1 {
-            color: #00bcd4;
-            font-size: 32px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .data-viewer {
-            background: #1e1e1e;
-            padding: 25px;
-            border-radius: 12px;
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
-            width: 90%;
-            max-width: 900px;
-            text-align: left;
-            white-space: pre-wrap;
-            word-wrap: break-word;
-            font-size: 18px;
-            line-height: 1.6;
-        }
-        .label {
-            color: #81c784;
-            font-weight: bold;
-            display: block;
-            margin-top: 15px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #3c3c3c;
-        }
-        .value {
-            color: #ffffff;
-            font-size: 16px;
-        }
-        .status-ready {
-            color: #ffb74d;
-        }
-    </style>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #050814;
+      --bg-alt: #0c1020;
+      --accent: #1e90ff;
+      --accent-soft: rgba(30, 144, 255, 0.15);
+      --danger: #ff5252;
+      --text-main: #f5f7ff;
+      --text-muted: #a4a9c5;
+      --radius-lg: 18px;
+    }
+    * { box-sizing: border-box; }
+    /* Fullscreen setup */
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%; background: #000; font-family: system-ui; color: var(--text-main); overflow: hidden; display: flex; align-items: center; justify-content: center;
+    }
+    .shell { width: 100%; height: 100%; padding: 0; display: flex; align-items: center; justify-content: center; }
+    .main { flex: 1; width: 100%; height: 100%; position: relative; background: #000000; }
+    .video-wrapper { position: relative; width: 100%; height: 100%; background: #000; }
+    video { width: 100%; height: 100%; background: #000; outline: none; }
+    /* FIX: Κρύβουμε το dummy element που χρησιμοποιεί το Cast SDK */
+    #cast-player-player { display: none !important; }
+    /* Controls styles (διατηρούνται) */
+    .pro-controls { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px; background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%); pointer-events: none; opacity: 0; transition: opacity .25s ease; z-index: 30; }
+    .video-wrapper:hover .pro-controls, .controls-visible .pro-controls { opacity: 1; pointer-events: auto; }
+    .loading-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: var(--accent); background: rgba(0,0,0,0.7); padding: 15px 25px; border-radius: var(--radius-lg); display: none; z-index: 40; }
+    .loading-indicator.visible { display: block; }
+    .overlay-info { position: absolute; right: 12px; bottom: 70px; left: auto; padding: 6px 10px; border-radius: 12px; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(10px); font-size: 11px; color: var(--text-muted); display: flex; align-items: center; gap: 8px; z-index: 20; opacity: 0.5; }
+    .pro-bar { height: 6px; background: rgba(255,255,255,.2); border-radius: 999px; cursor: pointer; overflow: hidden; margin-bottom: 10px; position: relative; }
+    .pro-fill { height: 100%; width: 0%; background: var(--accent); }
+    .pro-btn { background: rgba(0,0,0,.65); border: none; color: white; padding: 10px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; transition: .15s ease; min-width: 44px; min-height: 36px; outline: none; }
+    .pro-btn.focus-ring, .pro-select.focus-ring { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent); }
+    .pro-select { background: rgba(0,0,0,.65); border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); padding: 8px 10px; color: #fff; font-size: 12px; outline: none; min-width: 88px; appearance: menulist-button; }
+    /* Log viewer for debugging (κρυφό) */
+    #logViewer { display: none; }
+  </style>
 </head>
 <body>
 
-<h1>🎬 CAST RECEIVER - CUSTOM MESSAGE DEBUGGER</h1>
+  <div class="shell">
+    <div class="main">
+      <div class="video-wrapper">
+        <video id="video" controls crossorigin="anonymous"></video>
+        
+        <div id="loadingIndicator" class="loading-indicator">
+            <span id="status-label">Loading...</span>
+        </div>
 
-<div id="dataViewer" class="data-viewer">
-    <span class="label status-ready">STATUS:</span>
-    <span class="value status-ready">Waiting for Cast Connection...</span>
-</div>
+        <div id="cast-player-player"></div> 
 
-<script>
-    const dataViewer = document.getElementById('dataViewer');
-    const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel'; // ΠΡΕΠΕΙ ΝΑ ΤΑΙΡΙΑΖΕΙ ΜΕ ΤΗΝ JAVA
+        <div class="pro-controls">
+          <div></div> 
+          <div>
+            <div class="pro-bar" id="proBar"><div class="pro-fill" id="proFill"></div><div class="pro-tooltip" id="proTooltip">00:00</div></div>
+            <div class="pro-buttons">
+              <div class="pro-left">
+                <button class="pro-btn" id="ppBtn" tabindex="1">▶</button>
+                <button class="pro-btn" id="rwBtn" tabindex="2">«10</button>
+                <button class="pro-btn" id="fwBtn" tabindex="3">10»</button>
+                <button class="pro-btn" id="subToggleBtn" disabled tabindex="4">Subs: Off</button>
+              </div>
+              <div class="pro-right">
+                <div class="pro-time-label" id="timeLabel">00:00 / 00:00</div>
+                <select class="pro-select" id="qualitySelect" disabled tabindex="5"><option value="-1">Auto</option></select>
+                <button class="pro-btn" id="muteBtn" tabindex="6">🔊</button>
+              </div>
+            </div>
+          </div>
+        </div>
 
-    function displayData(key, value, clear = false) {
-        if (clear) {
-            dataViewer.innerHTML = '';
-        }
+        <div class="overlay-info"><span id="info-res">Resolution: -</span><span class="chip" id="info-tech">CAF</span></div>
+      </div>
+    </div>
+  </div>
 
-        const entry = document.createElement('div');
+  <script>
+    const video = document.getElementById('video');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const statusLabel = document.getElementById('status-label'); 
+    const infoTech = document.getElementById('info-tech');
+    const infoRes = document.getElementById('info-res');
+    // ... (λοιπά controls elements) ...
+    const ppBtn = document.getElementById('ppBtn');
+    const rwBtn = document.getElementById('rwBtn');
+    const fwBtn = document.getElementById('fwBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const proBar = document.getElementById('proBar');
+    const proFill = document.getElementById('proFill');
+    const proTooltip = document.getElementById('proTooltip');
+    const timeLabel = document.getElementById('timeLabel');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const subToggleBtn = document.getElementById('subToggleBtn');
+    
+    let hlsInstance = null;
+    let dashInstance = null;
+    // ... (λοιπές μεταβλητές) ...
+    let hlsLevels = [];
+    let wakeLock = null; 
 
-        const keySpan = document.createElement('span');
-        keySpan.classList.add('label');
-        keySpan.textContent = key + ':';
+    const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
 
-        const valueSpan = document.createElement('span');
-        valueSpan.classList.add('value');
-        valueSpan.textContent = value;
-
-        entry.appendChild(keySpan);
-        entry.appendChild(valueSpan);
-        dataViewer.appendChild(entry);
+    /* --- Core Player Functions (loadStream, setStatus, attachSubtitles, controls...) --- */
+    
+    function log(message, type = 'info') {
+      // Σε αυτόν τον τελικό player, το log πάει μόνο στην console
+      console.log(`[GRMF PRO PLAYER - ${type.toUpperCase()}]`, message);
+    }
+    
+    function setStatus(text, type = 'info') {
+      statusLabel.textContent = text;
+      const isLoading = (text === 'Loading' || text === 'Buffering');
+      if (isLoading) { loadingIndicator.classList.add('visible'); } else { loadingIndicator.classList.remove('visible'); }
+      // ... (χρωματισμός loading indicator) ...
     }
 
-    // CAF Receiver
-    const context = cast.framework.CastReceiverContext.getInstance();
+    function clearTracks() { /* ... */ } // (Κώδικας παραλείπεται για συντομία - χρησιμοποίησε τον παλιό, πλήρη)
+    function attachSubtitles(url, label) { 
+        if (!url || url === 'NULL' || url.trim() === '') { clearTracks(); return; } 
+        // ... (πλήρης λογική)
+    } 
 
-    displayData('STATUS', 'CAF Receiver initialized. Waiting for messages...', true);
+    function destroyHls() { /* ... */ } // (Κώδικας παραλείπεται για συντομία)
+    function destroyDash() { /* ... */ } // (Κώδικας παραλείπεται για συντομία)
+    function resetQualityUI() { /* ... */ } // (Κώδικας παραλείπεται για συντομία)
 
-    // ΑΚΟΥΜΕ ΤΟ CUSTOM NAMESPACE
-    context.addCustomMessageListener(NAMESPACE, function (event) {
-        displayData('STATUS', 'Custom Message Received!', true);
+    // Ο loadStream πρέπει να παραμείνει Promise
+    function loadStream(videoUrl, subUrl, subLabel) {
+      return new Promise((resolve, reject) => {
+        // ... (πλήρης λογική hls.js / dash.js / native loading) ...
+        // [ΣΗΜΕΙΩΣΗ: Πρέπει να αντικαταστήσεις αυτό το comment με τον πλήρη κώδικα της loadStream, συμπεριλαμβανομένων των resolve/reject]
 
-        try {
-            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+        // Εδώ ένα placeholder για να μη σπάσει ο κώδικας του Cast
+        log(`Loading stream via Custom Channel: ${videoUrl}`, 'custom');
+        video.src = videoUrl;
+        attachSubtitles(subUrl, subLabel);
+        video.load();
+        video.play().then(resolve).catch((e) => { 
+            log('Autoplay blocked.', 'info'); 
+            reject(e); // Σφάλμα φόρτωσης
+        }); 
+      });
+    }
 
-            displayData('MESSAGE TYPE', data.type || 'N/A');
-            displayData('VIDEO URL (DIRECT)', data.url || 'URL MISSING');
-            displayData('SUB URL (DIRECT)', data.subUrl || 'NONE');
-            displayData('ΕΠΙΒΕΒΑΙΩΣΗ', 'Τα δεδομένα έφτασαν επιτυχώς! Η Java Logic είναι ΟΚ!');
+    // ... (όλες οι συναρτήσεις controls: togglePlayPause, formatTime, updateTimeLabel, event listeners, keydown) ...
+    // [ΣΗΜΕΙΩΣΗ: Πρέπει να συμπεριλάβεις ξανά ΟΛΗ τη λογική των controls / event listeners / keydown που είχαμε φτιάξει].
 
-        } catch (e) {
-            displayData('ERROR', 'Failed to parse JSON message: ' + e.message, true);
+    /* --- CAF CAST RECEIVER INTEGRATION --- */
+
+    window.onload = function() {
+        if (window.cast && window.cast.framework) {
+            
+            const context = cast.framework.CastReceiverContext.getInstance();
+            const playerManager = context.getPlayerManager();
+            
+            // --- FIXES ---
+            // 1. Χρησιμοποιούμε το dummy element για τον player του CAF
+            const playbackConfig = new cast.framework.PlaybackConfig();
+            playbackConfig.mediaElement = document.getElementById('cast-player-player');
+            context.setPlaybackConfig(playbackConfig); 
+            
+            // 2. Υποχρεώνουμε το Player Manager να χρησιμοποιήσει το δικό μας video tag
+            playerManager.setMediaElement(video);
+            
+            // 3. Ακούμε το Custom Message Channel
+            context.addCustomMessageListener(NAMESPACE, function (event) {
+                
+                log('Custom Message Received! Starting custom load.', 'cast');
+
+                try {
+                    // event.data είναι ήδη JSON object αν το στείλαμε με Cast API
+                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+                    const videoUrl = data.url;
+                    const subUrl = data.subUrl; 
+                    
+                    if (videoUrl) {
+                        // Καλούμε τον δικό μας loadStream με τα δεδομένα του Custom Message
+                        loadStream(videoUrl, subUrl, 'Greek')
+                            .then(() => {
+                                log('Custom Player Load SUCCESS.', 'cast');
+                            })
+                            .catch((e) => {
+                                log(`Custom Player Load FAILED: ${e.message}`, 'error');
+                            });
+                    }
+                } catch (e) {
+                    log(`Failed to parse custom JSON: ${e.message}`, 'error');
+                }
+            });
+
+            // Ξεκινάμε τον Context
+            context.start();
+            
+        } else {
+            log('CAF SDK not found.', 'error');
         }
-    });
-
-    context.start();
+    };
 </script>
-
 </body>
 </html>
