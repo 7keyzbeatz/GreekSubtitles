@@ -1,57 +1,83 @@
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>GRMF CAF Receiver</title>
-<script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <meta charset="UTF-8">
+  <title>GRMF Cast Receiver</title>
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      overflow: hidden;
+    }
+    iframe {
+      border: 0;
+      width: 100%;
+      height: 100%;
+    }
+  </style>
 </head>
 <body>
 
+<iframe id="playerFrame" src="player.html"></iframe>
+
 <script>
+const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
+const frame = document.getElementById('playerFrame');
 const context = cast.framework.CastReceiverContext.getInstance();
-const player = context.getPlayerManager();
-const NS = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
 
-context.setInactivityTimeout(0);
-
-context.addCustomMessageListener(NS, (event) => {
+// Receive messages from Android
+context.addCustomMessageListener(NAMESPACE, (event) => {
   try {
-    const data = JSON.parse(event.data);
+    const data = typeof event.data === 'string'
+      ? JSON.parse(event.data)
+      : event.data;
 
-    const media = new cast.framework.messages.MediaInformation();
-    media.contentId = data.url;
-    media.contentType = data.url.includes(".m3u8")
-      ? "application/x-mpegURL"
-      : "video/mp4";
+    frame.contentWindow.postMessage({
+      type: 'LOAD_STREAM',
+      url: data.url,
+      subUrl: data.subUrl,
+      subLabel: data.subLabel
+    }, '*');
 
-    media.streamType = cast.framework.messages.StreamType.BUFFERED;
-
-    if(data.subUrl){
-      const track = new cast.framework.messages.Track(
-        1, cast.framework.messages.TrackType.TEXT
-      );
-      track.trackContentId = data.subUrl;
-      track.trackContentType = "text/vtt";
-      track.subtype = cast.framework.messages.TextTrackType.SUBTITLES;
-      media.tracks = [track];
-    }
-
-    const req = new cast.framework.messages.LoadRequestData();
-    req.media = media;
-    req.autoplay = true;
-    if(media.tracks) req.activeTrackIds = [1];
-
-    player.load(req);
-
-  } catch(e){ console.log(e); }
+  } catch (e) {}
 });
 
-// Keep alive
-player.addEventListener(
-  cast.framework.events.EventType.ERROR,
-  ()=> console.log("PLAYER ERROR")
-);
+// Better remote key forwarding (key + keyCode)
+document.addEventListener('keydown', (e) => {
 
+  let key = e.key;
+
+  // Map keyCodes (for TV remotes)
+  switch (e.keyCode) {
+    case 415: key = 'MediaPlayPause'; break;
+    case 413: key = 'MediaPlay'; break;
+    case 19:  key = 'MediaPause'; break;
+
+    case 166:
+    case 427:
+    case 425: key = 'MediaNextTrack'; break;
+
+    case 167:
+    case 428:
+    case 424: key = 'MediaPreviousTrack'; break;
+
+    case 33: key = 'ChannelUp'; break;
+    case 34: key = 'ChannelDown'; break;
+  }
+
+  frame.contentWindow.postMessage({
+    type: 'REMOTE_KEY',
+    key: key
+  }, '*');
+});
+
+// Never sleep
+context.setInactivityTimeout(0);
 context.start();
 </script>
 
