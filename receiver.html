@@ -5,7 +5,9 @@
   <title>GRMF Netflix Style Cast Receiver</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
+  <!-- HLS για HLS .m3u8 -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <!-- CAF μόνο για messaging από Android -->
   <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
   <style>
@@ -14,269 +16,583 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      background: black;
+      background: #000;
       overflow: hidden;
-      font-family: Arial, sans-serif;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    body {
+      position: relative;
     }
 
     video {
       width: 100%;
       height: 100%;
-      background: black;
+      object-fit: contain;
+      background: #000;
     }
 
-    .overlay {
-      position: fixed;
-      bottom: 0;
-      width: 100%;
-      padding: 30px 20px 20px;
-      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      opacity: 1;
-      transition: opacity 0.3s ease;
-      z-index: 1000;
-    }
-
-    .overlay.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    .controls {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .left, .right {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-
-    button, select {
-      background: rgba(20,20,20,0.9);
-      color: white;
-      border: 1px solid rgba(255,255,255,0.2);
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    button:hover {
-      background: rgba(50,50,50,1);
-    }
-
-    .seekbar {
-      width: 100%;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    input[type=range] {
-      flex: 1;
-      -webkit-appearance: none;
-      height: 4px;
-      border-radius: 2px;
-      background: rgba(255,255,255,0.3);
-      outline: none;
-      cursor: pointer;
-    }
-
-    input[type=range]::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: white;
-    }
-
+    /* Debug box top-left */
     #debug {
-      position: fixed;
+      position: absolute;
       top: 10px;
       left: 10px;
       background: rgba(0,0,0,0.7);
       color: #00ffcc;
       font-size: 12px;
-      padding: 10px;
+      padding: 8px 10px;
       border-radius: 10px;
       z-index: 9999;
+      max-width: 90%;
       white-space: pre-wrap;
       word-break: break-word;
-      max-width: 90%;
+    }
+
+    /* Netflix-like overlay */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 30px 28px 22px;
+      background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.4), transparent 55%);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.28s ease-out, transform 0.28s ease-out;
+      transform: translateY(8px);
+      z-index: 900;
+    }
+
+    .overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    /* Seekbar row */
+    .seek-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .time-label {
+      font-size: 13px;
+      color: #f5f5f5;
+      min-width: 64px;
+      text-align: center;
+    }
+
+    .seek-wrapper {
+      position: relative;
+      flex: 1;
+      display: flex;
+      align-items: center;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.35);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.3);
+    }
+
+    /* “Thumbnail” / time preview bubble πάνω από το seekbar */
+    .thumb-preview {
+      position: absolute;
+      bottom: 18px;
+      transform: translateX(-50%) translateY(0);
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      font-size: 11px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease-out, transform 0.12s ease-out;
+    }
+
+    .thumb-preview.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-2px);
+    }
+
+    /* Bottom buttons row */
+    .controls-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .side-left,
+    .side-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn {
+      background: rgba(15,15,15,0.9);
+      color: #fff;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.24);
+      padding: 9px 16px;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 36px;
+      transition: background 0.16s ease, transform 0.14s ease, box-shadow 0.16s ease;
+    }
+
+    .btn:hover {
+      background: rgba(255,255,255,0.16);
+      transform: translateY(-1px) scale(1.02);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.55);
+    }
+
+    .btn:active {
+      transform: translateY(0) scale(0.98);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+    }
+
+    .btn-main {
+      font-size: 18px;
+      padding-inline: 20px;
+    }
+
+    .btn-icon {
+      font-size: 15px;
+    }
+
+    .quality-select {
+      background: rgba(15,15,15,0.9);
+      color: #fff;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.24);
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      min-height: 36px;
+      min-width: 120px;
+    }
+
+    .info-pill {
+      font-size: 12px;
+      color: #eee;
+      opacity: 0.85;
     }
   </style>
 </head>
 <body>
 
-<div id="debug">Waiting for stream...</div>
+<div id="debug">Waiting for Cast stream...</div>
 <video id="video" crossorigin="anonymous"></video>
 
-<div id="overlay" class="overlay hidden">
-
-  <div class="seekbar">
-    <span id="currentTime">0:00</span>
-    <input type="range" id="seek" min="0" max="100" value="0">
-    <span id="duration">0:00</span>
+<div id="overlay" class="overlay">
+  <div class="seek-row">
+    <div id="currentTime" class="time-label">0:00</div>
+    <div class="seek-wrapper" id="seekWrapper">
+      <input type="range" id="seek" min="0" max="100" value="0">
+      <div id="thumbPreview" class="thumb-preview">0:00</div>
+    </div>
+    <div id="duration" class="time-label">0:00</div>
   </div>
 
-  <div class="controls">
-    <div class="left">
-      <button id="backBtn">⏪ 10s</button>
-      <button id="playPauseBtn">⏸</button>
-      <button id="forwardBtn">10s ⏩</button>
-      <button id="muteBtn">🔊</button>
+  <div class="controls-row">
+    <div class="side-left">
+      <button id="backBtn" class="btn">
+        <span class="btn-icon">⏪</span> 10s
+      </button>
+      <button id="playPauseBtn" class="btn btn-main">
+        <span id="playPauseIcon">⏸</span>
+      </button>
+      <button id="forwardBtn" class="btn">
+        10s <span class="btn-icon">⏩</span>
+      </button>
+      <button id="muteBtn" class="btn">
+        <span id="muteIcon">🔊</span>
+      </button>
     </div>
 
-    <div class="right">
-      <select id="qualityBtn">
-        <option value="auto">AUTO</option>
-        <option value="low">LOW</option>
-        <option value="mid">MEDIUM</option>
-        <option value="high">HIGH</option>
+    <div class="side-right">
+      <span id="qualityInfo" class="info-pill">Quality: auto</span>
+      <select id="qualityBtn" class="quality-select" disabled>
+        <option value="-1">AUTO</option>
       </select>
     </div>
   </div>
 </div>
 
 <script>
-const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
+  const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
 
-const video = document.getElementById('video');
-const debug = document.getElementById('debug');
-const overlay = document.getElementById('overlay');
+  const video = document.getElementById('video');
+  const debug = document.getElementById('debug');
+  const overlay = document.getElementById('overlay');
 
-const playPauseBtn = document.getElementById('playPauseBtn');
-const backBtn = document.getElementById('backBtn');
-const forwardBtn = document.getElementById('forwardBtn');
-const muteBtn = document.getElementById('muteBtn');
-const seek = document.getElementById('seek');
-const currentTimeEl = document.getElementById('currentTime');
-const durationEl = document.getElementById('duration');
-const qualityBtn = document.getElementById('qualityBtn');
+  const backBtn = document.getElementById('backBtn');
+  const forwardBtn = document.getElementById('forwardBtn');
+  const playPauseBtn = document.getElementById('playPauseBtn');
+  const playPauseIcon = document.getElementById('playPauseIcon');
+  const muteBtn = document.getElementById('muteBtn');
+  const muteIcon = document.getElementById('muteIcon');
 
-let hls = null;
-let hideTimeout = null;
+  const seek = document.getElementById('seek');
+  const seekWrapper = document.getElementById('seekWrapper');
+  const thumbPreview = document.getElementById('thumbPreview');
+  const currentTimeEl = document.getElementById('currentTime');
+  const durationEl = document.getElementById('duration');
 
-function log(msg) {
-  debug.textContent = msg;
-}
+  const qualityBtn = document.getElementById('qualityBtn');
+  const qualityInfo = document.getElementById('qualityInfo');
 
-function formatTime(t) {
-  if (!t || isNaN(t)) return "0:00";
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60).toString().padStart(2, '0');
-  return m + ":" + s;
-}
+  let hls = null;
+  let hideTimer = null;
 
-function showUI() {
-  overlay.classList.remove('hidden');
-  clearTimeout(hideTimeout);
-  hideTimeout = setTimeout(() => {
-    overlay.classList.add('hidden');
-  }, 3000);
-}
-
-document.body.addEventListener('mousemove', showUI);
-
-function clearPlayer() {
-  if (hls) {
-    hls.destroy();
-    hls = null;
+  function log(msg) {
+    debug.textContent = msg;
+    console.log('[GRMF CAST]', msg);
   }
 
-  video.pause();
-  video.removeAttribute('src');
-  video.load();
+  function showUI() {
+    overlay.classList.add('visible');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      overlay.classList.remove('visible');
+    }, 3000);
+  }
 
-  video.querySelectorAll('track').forEach(t => t.remove());
-}
+  // δείξε UI όταν κουνάει ποντίκι ή remote
+  document.addEventListener('mousemove', showUI);
+  document.addEventListener('keydown', showUI);
 
-function attachSubs(url) {
-  if (!url || !url.endsWith('.vtt')) return;
+  function formatTime(t) {
+    if (!t || isNaN(t)) return '0:00';
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
 
-  const track = document.createElement('track');
-  track.kind = 'subtitles';
-  track.default = true;
-  track.src = url;
-  track.label = 'Subs';
-  video.appendChild(track);
-}
+  function resetPlayer() {
+    if (hls) {
+      hls.destroy();
+      hls = null;
+    }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.querySelectorAll('track').forEach(t => t.remove());
 
-function playStream(url, subUrl) {
-  clearPlayer();
+    seek.value = 0;
+    currentTimeEl.textContent = '0:00';
+    durationEl.textContent = '0:00';
 
-  log('Playing:\n' + url);
+    qualityBtn.innerHTML = '<option value="-1">AUTO</option>';
+    qualityBtn.disabled = true;
+    qualityInfo.textContent = 'Quality: auto';
+  }
 
-  if (url.includes('.m3u8') && Hls.isSupported()) {
-    hls = new Hls();
-    hls.loadSource(url);
-    hls.attachMedia(video);
+  function attachSubs(url) {
+    if (!url || !url.endsWith('.vtt')) return;
 
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = 'Subtitles';
+    track.srclang = 'el';
+    track.src = url;
+    track.default = true;
+    video.appendChild(track);
+  }
+
+  function playStream(videoUrl, subUrl) {
+    if (!videoUrl) {
+      log('Empty video URL');
+      return;
+    }
+
+    resetPlayer();
+    log(`Loading stream:\n${videoUrl}\nSubs:\n${subUrl || 'none'}`);
+
+    const isHls = videoUrl.toLowerCase().includes('.m3u8');
+
+    if (isHls && window.Hls && window.Hls.isSupported()) {
+      hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: false,
+      });
+
+      // γεμίζουμε τα quality levels μόλις φορτώσει το manifest
+      hls.on(Hls.Events.MANIFEST_LOADED, (event, data) => {
+        const levels = data.levels || [];
+        if (!levels.length) return;
+
+        // build options: sorted by height/bitrate, αλλά κρατάμε index
+        qualityBtn.innerHTML = '<option value="-1">AUTO</option>';
+        const items = levels.map((lvl, idx) => ({
+          idx,
+          height: lvl.height || 0,
+          bitrate: lvl.bitrate || 0
+        }));
+        items.sort((a,b) => {
+          if (a.height && b.height && a.height !== b.height) {
+            return a.height - b.height;
+          }
+          return a.bitrate - b.bitrate;
+        });
+
+        items.forEach(item => {
+          const opt = document.createElement('option');
+          const labelHeight = item.height;
+          const labelBitrate = item.bitrate;
+          const label = labelHeight
+            ? `${labelHeight}p (${Math.round(labelBitrate/1000)} kbps)`
+            : `${Math.round(labelBitrate/1000)} kbps`;
+          opt.value = item.idx.toString();     // πραγματικό level index
+          opt.textContent = label;
+          qualityBtn.appendChild(opt);
+        });
+
+        qualityBtn.disabled = false;
+        qualityBtn.value = '-1';
+        qualityInfo.textContent = 'Quality: auto';
+      });
+
+      // όταν αλλάξει level από Hls (είτε auto είτε manual)
+      hls.on(Hls.Events.LEVEL_SWITCHED, (event, data) => {
+        if (!hls || !hls.levels) return;
+        const idx = data.level;
+        const lvl = hls.levels[idx];
+        if (!lvl) return;
+
+        const labelHeight = lvl.height || 0;
+        const labelBitrate = lvl.bitrate || 0;
+        const label = labelHeight
+          ? `${labelHeight}p`
+          : `${Math.round(labelBitrate/1000)} kbps`;
+
+        if (hls.autoLevelEnabled) {
+          qualityInfo.textContent = `Quality: auto (${label})`;
+          qualityBtn.value = '-1';
+        } else {
+          qualityInfo.textContent = `Quality: ${label}`;
+          qualityBtn.value = idx.toString();
+        }
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('HLS error', data);
+        if (data.fatal) {
+          log('HLS fatal error: ' + data.type);
+        }
+      });
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        attachSubs(subUrl);
+        video.play().catch(()=>{});
+        showUI();
+      });
+
+      hls.loadSource(videoUrl);
+      hls.attachMedia(video);
+    } else {
+      // fallback native
+      video.src = videoUrl;
       attachSubs(subUrl);
       video.play().catch(()=>{});
       showUI();
-    });
-  } else {
-    video.src = url;
-    attachSubs(subUrl);
-    video.play().catch(()=>{});
-    showUI();
+    }
   }
-}
 
-// ==== PLAYER EVENTS ====
-video.addEventListener('timeupdate', () => {
-  seek.value = (video.currentTime / video.duration) * 100 || 0;
-  currentTimeEl.textContent = formatTime(video.currentTime);
-  durationEl.textContent = formatTime(video.duration);
-});
+  // === PLAYER CONTROLS ===
+  video.addEventListener('timeupdate', () => {
+    if (!video.duration || isNaN(video.duration)) return;
+    seek.value = (video.currentTime / video.duration) * 100 || 0;
+    currentTimeEl.textContent = formatTime(video.currentTime);
+    durationEl.textContent = formatTime(video.duration);
+  });
 
-seek.addEventListener('input', () => {
-  video.currentTime = (seek.value / 100) * video.duration;
-});
+  video.addEventListener('play', () => {
+    playPauseIcon.textContent = '⏸';
+  });
 
-playPauseBtn.onclick = () => {
-  if (video.paused) {
-    video.play();
-    playPauseBtn.textContent = '⏸';
-  } else {
-    video.pause();
-    playPauseBtn.textContent = '▶';
+  video.addEventListener('pause', () => {
+    playPauseIcon.textContent = '▶';
+  });
+
+  playPauseBtn.onclick = () => {
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  };
+
+  backBtn.onclick = () => {
+    if (!isNaN(video.currentTime)) {
+      video.currentTime = Math.max(0, video.currentTime - 10);
+    }
+  };
+
+  forwardBtn.onclick = () => {
+    if (!isNaN(video.currentTime) && !isNaN(video.duration)) {
+      video.currentTime = Math.min(video.duration, video.currentTime + 10);
+    }
+  };
+
+  muteBtn.onclick = () => {
+    video.muted = !video.muted;
+    muteIcon.textContent = video.muted ? '🔇' : '🔊';
+  };
+
+  // Seek bar drag
+  let seeking = false;
+
+  seek.addEventListener('input', () => {
+    seeking = true;
+    if (!isNaN(video.duration)) {
+      const pos = seek.value / 100;
+      video.currentTime = pos * video.duration;
+    }
+  });
+
+  seek.addEventListener('change', () => {
+    seeking = false;
+  });
+
+  // “Thumbnail” / time preview πάνω από seekbar
+  seekWrapper.addEventListener('mousemove', (e) => {
+    if (!video.duration || isNaN(video.duration)) return;
+    const rect = seekWrapper.getBoundingClientRect();
+    let pos = (e.clientX - rect.left) / rect.width;
+    pos = Math.max(0, Math.min(1, pos));
+
+    const previewTime = pos * video.duration;
+    thumbPreview.textContent = formatTime(previewTime);
+    thumbPreview.style.left = `${pos * 100}%`;
+    thumbPreview.classList.add('visible');
+  });
+
+  seekWrapper.addEventListener('mouseleave', () => {
+    thumbPreview.classList.remove('visible');
+  });
+
+  // Quality select → influence hls
+  qualityBtn.addEventListener('change', () => {
+    if (!hls) return;
+    const value = qualityBtn.value;
+    if (value === '-1') {
+      // AUTO
+      hls.currentLevel = -1;
+      hls.autoLevelEnabled = true;
+      qualityInfo.textContent = 'Quality: auto';
+    } else {
+      const idx = parseInt(value, 10);
+      if (!isNaN(idx)) {
+        hls.autoLevelEnabled = false;
+        hls.currentLevel = idx;
+        const lvl = hls.levels && hls.levels[idx];
+        if (lvl) {
+          const labelHeight = lvl.height || 0;
+          const labelBitrate = lvl.bitrate || 0;
+          const label = labelHeight
+            ? `${labelHeight}p (${Math.round(labelBitrate/1000)} kbps)`
+            : `${Math.round(labelBitrate/1000)} kbps`;
+          qualityInfo.textContent = `Quality: ${label}`;
+        }
+      }
+    }
+  });
+
+  // === CAST MESSAGING ===
+  const context = cast.framework.CastReceiverContext.getInstance();
+
+  context.addCustomMessageListener(NAMESPACE, (event) => {
+    try {
+      const data = typeof event.data === 'string'
+        ? JSON.parse(event.data)
+        : event.data;
+
+      const videoUrl = data.url || '';
+      const subUrl = data.subUrl || '';
+      playStream(videoUrl, subUrl);
+    } catch (e) {
+      log('JSON error: ' + e.message);
+    }
+  });
+
+  context.start();
+
+  // === Browser debug mode ===
+  if (!window.cast || !cast.framework) {
+    log('Browser mode. Use playTest(url, subUrl) from console.');
+    window.playTest = (u, s) => playStream(u, s);
   }
-};
 
-backBtn.onclick = () => video.currentTime -= 10;
-forwardBtn.onclick = () => video.currentTime += 10;
+// ==== REMOTE CONTROL SUPPORT ====
 
-muteBtn.onclick = () => {
-  video.muted = !video.muted;
-  muteBtn.textContent = video.muted ? '🔇' : '🔊';
-};
+document.addEventListener('keydown', (e) => {
+  showUI();
 
-// UI only Quality (real quality change γίνεται από sender)
-qualityBtn.onchange = () => {
-  log('Quality UI set to: ' + qualityBtn.value);
-};
+  switch (e.key) {
+    case 'MediaPlayPause':
+    case ' ':
+    case 'Enter':
+      // Play / Pause
+      if (video.paused) video.play();
+      else video.pause();
+      break;
 
-// ==== CAST LISTENER ====
-const context = cast.framework.CastReceiverContext.getInstance();
+    case 'ArrowLeft':
+      // -10 sec
+      video.currentTime = Math.max(0, video.currentTime - 10);
+      break;
 
-context.addCustomMessageListener(NAMESPACE, (event) => {
-  const data = typeof event.data === 'string'
-    ? JSON.parse(event.data)
-    : event.data;
+    case 'ArrowRight':
+      // +10 sec
+      if (!isNaN(video.duration)) {
+        video.currentTime = Math.min(video.duration, video.currentTime + 10);
+      }
+      break;
 
-  playStream(data.url || '', data.subUrl || '');
+    case 'ArrowUp':
+      // show UI
+      showUI();
+      break;
+
+    case 'ArrowDown':
+      // hide UI
+      overlay.classList.remove('visible');
+      break;
+
+    case 'KeyM':
+      // Mute shortcut
+      video.muted = !video.muted;
+      muteIcon.textContent = video.muted ? '🔇' : '🔊';
+      break;
+  }
 });
 
-context.start();
+  
 </script>
 
 </body>
