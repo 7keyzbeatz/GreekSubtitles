@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>GRMF Pro HLS Player - Debug Receiver</title>
+  <title>GRMF Pro HLS Player - Final Receiver</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script src="//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
@@ -46,26 +46,37 @@
     .shell {
       width: 100%;
       height: 100%;
-      padding: 16px; /* Επαναφέρω το padding για το Panel */
+      padding: 16px;
       display: flex;
       flex-direction: column;
       gap: 12px;
     }
 
-    /* Αρχική απόκρυψη του panel, εμφανίζεται μόνο με toggle */
+    /* FIX: Κρύβουμε το dummy element που χρησιμοποιεί το Cast SDK για τον δικό του player */
+    #cast-player-player {
+      display: none !important;
+    }
+
     .panel {
       background: linear-gradient(135deg, rgba(8, 13, 35, 0.96), rgba(8, 15, 45, 0.96));
       border-radius: var(--radius-lg);
       padding: 14px 16px;
       box-shadow: var(--shadow-soft);
       border: 1px solid rgba(255, 255, 255, 0.06);
-      display: none; /* Κρυφό αρχικά */
+      display: none; 
       flex-direction: column;
       gap: 10px;
+      z-index: 50; /* Πάνω από όλα */
+      position: absolute;
+      top: 16px;
+      width: 90%;
+      max-width: 600px;
+      left: 50%;
+      transform: translateX(-50%);
     }
     
     .panel.visible {
-        display: flex; /* Ορατό με κλικ */
+        display: flex; 
     }
 
     .panel-top {
@@ -191,7 +202,6 @@
       outline: none;
     }
 
-    /* Toggle Button για εμφάνιση Debug Panel */
     #toggleDebugBtn {
         position: absolute;
         top: 16px;
@@ -225,7 +235,6 @@
       transition: opacity .25s ease;
     }
 
-    /* ... (Κρατάμε τα controls styles, focus-ring κλπ) ... */
     .pro-controls {
       position: absolute;
       inset: 0;
@@ -280,6 +289,8 @@
     
     <button id="toggleDebugBtn">⚙️ Debug Panel</button>
 
+    <div id="cast-player-player"></div>
+
     <div id="debugPanel" class="panel">
       <div class="panel-top">
         <div class="panel-title">Stream Configuration (Manual Debug)</div>
@@ -287,7 +298,7 @@
       </div>
       <div class="panel-grid">
         <div class="field">
-          <label for="videoUrl">Video URL (HLS .m3u8 ή MP4)</label>
+          <label for="videoUrl">Video URL (HLS .m3u8, MP4, κλπ.)</label>
           <input id="videoUrl" type="text" placeholder="URL από Android Studio" />
         </div>
         <div class="field">
@@ -309,6 +320,7 @@
       </div>
       <div id="log" style="font-size:11px; color:var(--text-muted);">Ready. Waiting for Cast or manual input.</div>
     </div>
+
     <div class="main">
       <div class="video-wrapper">
         <video id="video" controls crossorigin="anonymous"></video>
@@ -374,7 +386,6 @@
     const qualitySelect = document.getElementById('qualitySelect');
     const subToggleBtn = document.getElementById('subToggleBtn');
     
-    // Debug Panel Elements
     const debugPanel = document.getElementById('debugPanel');
     const toggleDebugBtn = document.getElementById('toggleDebugBtn');
     const videoInput = document.getElementById('videoUrl');
@@ -431,7 +442,6 @@
     function log(message, type = 'info') {
       console.log('[GRMF PLAYER]', message);
       const time = new Date().toLocaleTimeString();
-      // Εμφάνιση του log στο Debug Panel
       logEl.innerHTML = `[${time}] ${message}`; 
       if (type === 'error') {
           setStatus(message, 'error');
@@ -445,8 +455,9 @@
 
     function setStatus(text, type = 'info') {
       statusLabel.textContent = text;
-      if (text === 'Loading' || text === 'Buffering') {
+      if (text === 'Loading' || text === 'Buffering' || text === 'Ready') {
           loadingIndicator.classList.add('visible');
+          if (text === 'Ready' && type === 'info') loadingIndicator.classList.remove('visible');
       } else {
           loadingIndicator.classList.remove('visible');
       }
@@ -660,7 +671,6 @@
         debugPanel.classList.toggle('visible');
     });
 
-    // Manual Load Button
     btnLoad.addEventListener('click', () => {
       const v = videoInput.value.trim();
       const s = subInput.value.trim();
@@ -669,10 +679,9 @@
       loadStream(v, s, label).catch(e => {
           log(`Manual load failed: ${e.message}`, 'error');
       });
-      debugPanel.classList.remove('visible'); // Κρύψε το panel μετά τη φόρτωση
+      debugPanel.classList.remove('visible'); 
     });
 
-    // Demo values button
     btnDemo.addEventListener('click', () => {
       videoInput.value = 'https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8';
       subInput.value = 'https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt';
@@ -686,9 +695,7 @@
         if ('wakeLock' in navigator) {
             try {
                 wakeLock = await navigator.wakeLock.request('screen');
-            } catch (err) {
-                log(`Failed to acquire Wake Lock: ${err.name}`, 'error');
-            }
+            } catch (err) {}
         }
     }
     
@@ -699,7 +706,8 @@
         }
     }
 
-    // ... (video event listeners) ...
+    /* === Video Event Listeners & Controls === */
+
     video.addEventListener('loadedmetadata', () => {
       setStatus('Ready');
       updateTimeLabel();
@@ -725,7 +733,8 @@
       releaseWakeLock(); 
     });
 
-    // ... (Player controls logic) ...
+    // ... (rest of control functions and listeners) ...
+
     function togglePlayPause() {
       if (video.paused) { video.play().catch(() => {}); } else { video.pause(); }
     }
@@ -763,7 +772,129 @@
       const pos = (e.clientX - rect.left) / rect.width;
       if (video.duration) { video.currentTime = pos * video.duration; }
     });
+    
+    video.addEventListener('timeupdate', () => {
+        updateTimeLabel();
+        if (video.duration) {
+            proFill.style.width = `${(video.currentTime / video.duration) * 100}%`;
+        }
+    });
 
+    if (subToggleBtn) {
+      subToggleBtn.addEventListener('click', () => {
+        if (!video.textTracks || video.textTracks.length === 0) return;
+        const anyShowing = Array.from(video.textTracks).some(t => t.mode === 'showing');
+        const nextMode = anyShowing ? 'disabled' : 'showing';
+        for (let i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode = nextMode;
+        }
+        subToggleBtn.dataset.state = nextMode === 'showing' ? 'on' : 'off';
+        subToggleBtn.textContent = nextMode === 'showing' ? 'Subs: On' : 'Subs: Off';
+      });
+    }
+
+    if (qualitySelect) {
+      qualitySelect.addEventListener('change', () => {
+        if (!hlsInstance) return;
+        const value = qualitySelect.value;
+        if (value === '-1') {
+          hlsInstance.currentLevel = -1; // auto
+          hlsInstance.autoLevelEnabled = true;
+          infoRes.textContent = 'Resolution: auto';
+        } else {
+          const levelIndex = parseInt(value, 10);
+          if (!isNaN(levelIndex)) {
+            hlsInstance.autoLevelEnabled = false;
+            hlsInstance.currentLevel = levelIndex;
+            const level = hlsInstance.levels && hlsInstance.levels[levelIndex];
+            if (level && level.height) {
+              infoRes.textContent = `Resolution: ${level.height}p`;
+            }
+          }
+        }
+        setFocus(focusableControls.indexOf(qualitySelect));
+      });
+    }
+    
+    window.addEventListener('keydown', (e) => {
+        const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
+        
+        if (activeTag === 'select') {
+           if (e.key === 'Enter') { return; }
+           return; 
+        }
+  
+        document.body.classList.add('controls-visible');
+  
+        if (e.key === ' ' || e.key === 'MediaPlayPause') {
+          e.preventDefault();
+          togglePlayPause();
+          return;
+        }
+  
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          if (focusIndex >= 0 && focusIndex < focusableControls.length) {
+            const el = focusableControls[focusIndex];
+            if (el.tagName.toLowerCase() === 'select') {
+                el.focus();
+            } else if (el && typeof el.click === 'function') {
+              el.click();
+            }
+          } else {
+            togglePlayPause();
+          }
+          return;
+        }
+  
+        switch (e.key) {
+          case 'ArrowLeft':
+            e.preventDefault();
+            if (focusIndex === -1) {
+              if (!isNaN(video.currentTime)) { video.currentTime = Math.max(0, (video.currentTime || 0) - 10); }
+              if (focusableControls.length) setFocus(0);
+            } else {
+              setFocus(focusIndex - 1);
+            }
+            break;
+          case 'ArrowRight':
+            e.preventDefault();
+            if (focusIndex === -1) {
+              if (video.duration) { video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10); }
+              if (focusableControls.length) setFocus(0);
+            } else {
+              setFocus(focusIndex + 1);
+            }
+            break;
+          case 'MediaRewind':
+            e.preventDefault();
+            if (!isNaN(video.currentTime)) { video.currentTime = Math.max(0, (video.currentTime || 0) - 10); }
+            break;
+          case 'MediaFastForward':
+            e.preventDefault();
+            if (video.duration) { video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10); }
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            video.volume = Math.min(1, (video.volume || 0) + 0.05);
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            video.volume = Math.max(0, (video.volume || 0) - 0.05);
+            break;
+          case 'KeyM':
+            e.preventDefault();
+            muteBtn.click();
+            break;
+          case 'Escape':
+            e.preventDefault();
+            clearFocus();
+            document.body.classList.remove('controls-visible');
+            break;
+          default:
+            break;
+        }
+      });
 
     /* === CAST SDK INTEGRATION === */
 
@@ -776,7 +907,16 @@
             
             requestWakeLock();
 
-            // Intercept LOAD request (από την Android εφαρμογή σου)
+            // 1. FIX: Δίνουμε ένα κενό HTML element στο SDK.
+            // Το Cast SDK θα εμφανίσει τον player του ΜΕΣΑ σε αυτό το element.
+            // Επειδή το κρύψαμε με CSS (βλέπε #cast-player-player), δεν θα εμφανιστεί ποτέ.
+            const playbackConfig = new cast.framework.PlaybackConfig();
+            playbackConfig.mediaElement = document.getElementById('cast-player-player');
+            context.setPlaybackConfig(playbackConfig); 
+            // 2. Επίσης, ορίζουμε το playerManager να χρησιμοποιεί το δικό μας video tag
+            playerManager.setMediaElement(video);
+
+
             playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (loadRequest) => {
                 
                 const media = loadRequest.media;
@@ -798,13 +938,11 @@
                 
                 log(`Cast: Received LOAD command for: ${videoUrl}`, 'cast');
 
-                // Γέμισμα των input πεδίων για debugging αν χρειαστεί
                 if (videoInput) videoInput.value = videoUrl;
                 if (subInput) subInput.value = subUrl || '';
                 if (subLabelInput) subLabelInput.value = subLabel || 'Greek';
 
 
-                // Καλούμε τη δική μας loadStream για να χειριστούμε HLS/DASH/Subtitles
                 return loadStream(videoUrl, subUrl, subLabel)
                     .then(() => {
                          log(`Cast: Custom load finished successfully.`, 'cast');
@@ -812,7 +950,6 @@
                     })
                     .catch(e => {
                         log(`Cast: Player load failed. Check URL or network.`, 'error');
-                        // Επιστρέφουμε null για να πούμε στο Cast SDK ότι το load απέτυχε
                         return null; 
                     });
             });
@@ -820,7 +957,6 @@
             context.start();
             
         } else {
-            // Fallback για manual test σε απλό browser
             log('Cast SDK not found. Waiting for manual input.');
         }
     };
