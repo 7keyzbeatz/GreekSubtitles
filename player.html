@@ -1,359 +1,69 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<title>GRMF Cast Player</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta charset="UTF-8">
+<title>GRMF Player</title>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 
 <style>
 html,body{
   margin:0;width:100%;height:100%;
-  background:#020817;
-  font-family:system-ui,Arial,sans-serif;
+  background:#000;font-family:Arial,system-ui;
   overflow:hidden;
 }
 video{
-  width:100%;height:100%;object-fit:contain;
-  background:radial-gradient(circle,#0b1430,#020817 60%,#000);
+  width:100%;height:100%;object-fit:contain;background:black;
 }
 
 /* Overlay */
 .overlay{
   position:absolute;inset:0;
-  background:linear-gradient(to top,rgba(2,8,23,.98),transparent);
-  display:flex;flex-direction:column;justify-content:flex-end;
-  padding:24px;
+  background:linear-gradient(to top,rgba(0,0,0,.85),transparent);
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  align-items:center;
   opacity:0;pointer-events:none;
-  transition:.25s ease;
+  transition:.25s;
 }
 .overlay.show{opacity:1;pointer-events:auto}
 
-/* Seek UI */
-.seek-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.time{color:#fff;font-size:12px;min-width:60px;text-align:center}
-.bar{
-  flex:1;height:6px;border-radius:999px;
-  background:#334155;position:relative;overflow:hidden
-}
-.fill{
-  height:100%;width:0%;
-  background:linear-gradient(90deg,#facc15,#f59e0b);
-  box-shadow:0 0 14px rgba(250,204,21,.7)
-}
-
-/* Thumbnail preview */
-.thumb-preview{
-  position:absolute;
-  bottom:42px;
-  transform:translateX(-50%);
-  background:#000;
-  border-radius:8px;
-  overflow:hidden;
-  display:none;
-  border:2px solid #facc15;
-}
-.thumb-preview img{
-  display:block;
-  width:160px;height:90px;
-  object-fit:cover;
-}
-.thumb-time{
-  text-align:center;
-  color:#fff;background:#000c;font-size:12px;padding:2px 4px;
-}
-
-/* Controls */
-.controls{
-  display:flex;justify-content:space-between;
-  gap:12px;flex-wrap:wrap
-}
-.left,.right{display:flex;gap:10px}
-
-/* Buttons */
-.btn{
-  background:radial-gradient(circle at top left,#facc15,#f59e0b,#b45309);
-  color:#020617;border-radius:999px;
-  border:1px solid #fde047;
-  padding:10px 18px;font-size:14px;font-weight:700;
-  box-shadow:0 12px 28px rgba(0,0,0,.85),0 0 14px rgba(250,204,21,.45);
-  transition:transform .15s, box-shadow .2s;
-}
-.right .btn{
-  background:radial-gradient(circle at top,#1d4ed8,#020617);
-  color:#e5e7eb;border-color:rgba(191,219,254,.5)
-}
-
-/* Focus */
-.focus{
-  transform:scale(1.12);
-  box-shadow:
-    0 0 0 3px #facc15,
-    0 0 0 6px rgba(30,64,175,.85),
-    0 16px 40px rgba(0,0,0,.95);
-}
-
-/* Quality menu */
-.menu{
-  position:absolute;right:24px;bottom:170px;
-  background:#020617f0;border-radius:14px;
-  padding:10px;display:none;flex-direction:column;gap:6px;
-  border:1px solid #334155;
-}
-.menu-item{
-  padding:6px 12px;border-radius:8px;
-  font-size:13px;color:#e5e7eb
-}
-.menu-item.active{
-  background:linear-gradient(90deg,#facc15,#f59e0b);
-  color:#020617;font-weight:700
-}
-.menu-item.selected{
-  outline:2px solid #60a5fa;
-}
-</style>
-</head>
-<body>
-
-<video id="video" crossorigin="anonymous"></video>
-
-<div id="overlay" class="overlay">
-  <div class="seek-row" id="seekRow">
-    <div id="cur" class="time">0:00</div>
-    <div id="bar" class="bar">
-      <div id="fill" class="fill"></div>
-
-      <div id="thumb" class="thumb-preview">
-        <img id="thumbImg" src="" />
-        <div id="thumbTime" class="thumb-time">0:00</div>
-      </div>
-    </div>
-    <div id="dur" class="time">0:00</div>
-  </div>
-
-  <div class="controls">
-    <div class="left">
-      <button id="bBack" class="btn">⏪ 10s</button>
-      <button id="bPlay" class="btn">⏸</button>
-      <button id="bFwd" class="btn">10s ⏩</button>
-      <button id="bRestart" class="btn">⟲</button>
-    </div>
-    <div class="right">
-      <button id="bSubs" class="btn">Subs: On</button>
-      <button id="bQuality" class="btn">Quality</button>
-      <button id="bMute" class="btn">🔊</button>
-    </div>
-  </div>
-</div>
-
-<div id="qMenu" class="menu"></div>
-
-<script>
-const video = document.getElementById('video');
-const overlay = document.getElementById('overlay');
-const curEl = document.getElementById('cur');
-const durEl = document.getElementById('dur');
-const fill = document.getElementById('fill');
-const bar = document.getElementById('bar');
-
-const thumb = document.getElementById('thumb');
-const thumbImg = document.getElementById('thumbImg');
-const thumbTime = document.getElementById('thumbTime');
-
-const bBack = document.getElementById('bBack');
-const bPlay = document.getElementById('bPlay');
-const bFwd = document.getElementById('bFwd');
-const bRestart = document.getElementById('bRestart');
-const bSubs = document.getElementById('bSubs');
-const bQuality = document.getElementById('bQuality');
-const bMute = document.getElementById('bMute');
-
-const qMenu = document.getElementById('qMenu');
-
-let hls=null,hideT;
-let qItems=[],qIndex=0,qOpen=false;
-let focusables=[bBack,bPlay,bFwd,bRestart,bSubs,bQuality,bMute];
-let fIndex=-1;
-
-let seekMode=false;
-let virtualSeek=0;
-
-/* helpers */
-const fmt=t=>{
-  if(!t||isNaN(t))return"0:00";
-  const m=Math.floor(t/60);
-  const s=Math.floor(t%60).toString().padStart(2,"0");
-  return `${m}:${s}`;
-};
-
-function showUI(){
-  overlay.classList.add("show");
-  clearTimeout(hideT);
-  hideT=setTimeout(()=>{overlay.classList.remove("show");clearFocus();seekMode=false;thumb.style.display="none"},5000);
-}
-
-function clearFocus(){
-  focusables.forEach(b=>b.classList.remove("focus"));fIndex=-1;
-}
-function moveFocus(d){
-  if(fIndex==-1)fIndex=0;
-  else fIndex=(fIndex+d+focusables.length)%focusables.length;
-  focusables.forEach(b=>b.classList.remove("focus"));
-  focusables[fIndex].classList.add("focus");
-}
-
-/* Quality highlight */
-function highlightQ(){
-  [...qMenu.children].forEach((el,i)=>{
-    el.classList.toggle("active",i===qIndex);
-  });
-}
-
-/* Fake thumbnails (placeholder) */
-function updateThumb(pos){
-  const rect=bar.getBoundingClientRect();
-  const pct=pos/video.duration;
-  const x=pct*rect.width;
-  thumb.style.left=x+"px";
-  thumb.style.display="block";
-  thumbTime.textContent=fmt(pos);
-
-  // placeholder thumb
-  thumbImg.src="https://dummyimage.com/320x180/000/fff&text="+fmt(pos);
-}
-
-/* Stream load */
-window.addEventListener("message",e=>{
-  const d=e.data||{};
-  if(d.type==="LOAD_STREAM"){
-    video.src=d.url;
-    video.play();
-    showUI();
-  }
-
-  if(d.type==="REMOTE_KEY"){
-    showUI();
-
-    switch(d.key){
-
-      /* navigation */
-      case "ArrowLeft":
-        if(seekMode){
-          virtualSeek=Math.max(0,virtualSeek-10);
-          updateThumb(virtualSeek);
-        }else moveFocus(-1);
-      break;
-
-      case "ArrowRight":
-        if(seekMode){
-          virtualSeek=Math.min(video.duration,virtualSeek+10);
-          updateThumb(virtualSeek);
-        }else moveFocus(1);
-      break;
-
-      case "ArrowUp":
-        seekMode=true;
-        virtualSeek=video.currentTime;
-        updateThumb(virtualSeek);
-      break;
-
-      case "ArrowDown":
-        seekMode=false;
-        thumb.style.display="none";
-      break;
-
-      /* R1 / L1 skip */
-      case "MediaNextTrack":
-      case "ChannelUp":
-        video.currentTime+=10;
-      break;
-
-      case "MediaPreviousTrack":
-      case "ChannelDown":
-        video.currentTime=Math.max(0,video.currentTime-10);
-      break;
-
-      case "Enter":
-        if(seekMode){
-          video.currentTime=virtualSeek;
-          seekMode=false;
-          thumb.style.display="none";
-        }else if(fIndex>=0){
-          focusables[fIndex].click();
-        }else{
-          video.paused?video.play():video.pause();
-        }
-      break;
-    }
-  }
-});
-
-/* Time updates */
-video.addEventListener("timeupdate",()=>{
-  if(!video.duration) return;
-  curEl.textContent=fmt(video.currentTime);
-  durEl.textContent=fmt(video.duration);
-  fill.style.width=(video.currentTime/video.duration*100)+"%";
-});
-
-/* UI buttons */
-bPlay.onclick=()=>video.paused?video.play():video.pause();
-bBack.onclick=()=>video.currentTime=Math.max(0,video.currentTime-10);
-bFwd.onclick=()=>video.currentTime+=10;
-bRestart.onclick=()=>{video.currentTime=0;video.play()};
-bMute.onclick=()=>{video.muted=!video.muted;bMute.textContent=video.muted?"🔇":"🔊"};
-</script>
-</body>
-</html>
-α<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>GRMF Netflix Player</title>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-
-<style>
-html,body{
-  margin:0;height:100%;width:100%;
-  background:#000;font-family:Arial,system-ui;
-  overflow:hidden;
-}
-video{
-  width:100%;height:100%;object-fit:contain;background:#000;
-}
-.overlay{
-  position:absolute;inset:0;
-  background:linear-gradient(to top,rgba(0,0,0,.9),transparent 60%);
-  display:flex;flex-direction:column;justify-content:flex-end;
-  opacity:0;pointer-events:none;transition:.25s;
-}
-.overlay.show{opacity:1;pointer-events:auto}
-
-/* Title */
-.title{
-  position:absolute;top:30px;left:0;right:0;
-  text-align:center;color:#fff;font-size:20px;font-weight:bold;
-}
-
-/* Center Controls */
+/* Center controls */
 .center-controls{
-  display:flex;justify-content:center;align-items:center;
-  gap:40px;margin-bottom:40px;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:60px;
+  margin-bottom:40px;
+  width:100%;
 }
 .cc-btn{
-  color:white;font-size:48px;
-  background:none;border:none;
-  transform:scale(1);transition:.15s;
+  width:96px;height:96px;
+  border-radius:50%;
+  border:none;
+  background:rgba(0,0,0,.65);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-shadow:0 0 0 2px rgba(255,255,255,.1);
 }
 .cc-btn.focus{
-  transform:scale(1.25);
-  text-shadow:0 0 20px rgba(255,255,255,.8);
+  box-shadow:0 0 0 4px yellow,0 0 30px rgba(255,255,0,.6);
+}
+.cc-btn svg{
+  width:56px;height:56px;
+  fill:white;
 }
 
 /* Seek bar */
-.seek-wrap{padding:0 60px 20px}
+.seek-wrap{
+  width:80%;
+  max-width:1100px;
+  padding-bottom:30px;
+}
 .seek-bar{
-  height:6px;border-radius:999px;background:#333;
+  width:100%;height:6px;
+  background:#333;border-radius:999px;
   position:relative;
 }
 .seek-fill{
@@ -365,37 +75,45 @@ video{
   width:16px;height:16px;
   background:red;border-radius:50%;
   transform:translate(-50%,-50%) scale(0);
-  transition:.15s;
 }
-.seek-thumb.show{transform:translate(-50%,-50%) scale(1.2)}
-
+.seek-thumb.show{
+  transform:translate(-50%,-50%) scale(1.2);
+}
 .time-row{
   display:flex;justify-content:space-between;
   color:white;font-size:12px;margin-top:6px;
 }
 
-/* Bottom right buttons */
+/* Bottom right popups */
 .side-controls{
-  position:absolute;right:40px;bottom:40px;
-  display:flex;gap:20px;
+  position:absolute;
+  right:40px;bottom:40px;
+  display:flex;gap:18px;
 }
 .side-btn{
-  background:#111;color:white;
-  padding:10px 20px;border-radius:30px;
-  font-size:14px;border:1px solid #444;
+  background:#111;
+  color:white;
+  border-radius:24px;
+  padding:10px 20px;
+  border:1px solid #444;
+  font-size:14px;
 }
-.side-btn.focus{
-  outline:3px solid yellow;
-}
+.side-btn.focus{outline:3px solid yellow}
 
 /* Quality menu */
 .menu{
-  position:absolute;right:40px;bottom:100px;
-  background:#111;border:1px solid #444;
-  border-radius:12px;padding:10px;display:none;
+  position:absolute;
+  right:40px;bottom:100px;
+  background:#111;
+  border:1px solid #444;
+  border-radius:14px;
+  padding:10px;
+  display:none;
 }
 .menu div{
-  color:white;padding:6px 14px;border-radius:8px;
+  color:white;
+  padding:6px 14px;
+  border-radius:8px;
 }
 .menu .active{
   background:yellow;color:black;
@@ -407,12 +125,20 @@ video{
 <video id="video"></video>
 
 <div id="overlay" class="overlay">
-  <div class="title" id="titleText"></div>
 
   <div class="center-controls">
-    <button id="btnBack" class="cc-btn">⏪</button>
-    <button id="btnPlay" class="cc-btn">⏸</button>
-    <button id="btnFwd" class="cc-btn">⏩</button>
+    <button id="btnBack" class="cc-btn">
+      <svg viewBox="0 0 24 24"><path d="M11 18V6L2.5 12 11 18zM21 18V6L12.5 12 21 18z"/></svg>
+    </button>
+
+    <button id="btnPlay" class="cc-btn">
+      <svg id="playI" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      <svg id="pauseI" viewBox="0 0 24 24" style="display:none"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+    </button>
+
+    <button id="btnFwd" class="cc-btn">
+      <svg viewBox="0 0 24 24"><path d="M13 18V6l8.5 6L13 18zM3 18V6l8.5 6L3 18z"/></svg>
+    </button>
   </div>
 
   <div class="seek-wrap">
@@ -421,8 +147,8 @@ video{
       <div id="seekThumb" class="seek-thumb"></div>
     </div>
     <div class="time-row">
-      <div id="curTime">0:00</div>
-      <div id="durTime">0:00</div>
+      <div id="cur">0:00</div>
+      <div id="dur">0:00</div>
     </div>
   </div>
 
@@ -435,184 +161,116 @@ video{
 <div id="qMenu" class="menu"></div>
 
 <script>
-const video = document.getElementById("video");
-const overlay = document.getElementById("overlay");
-const titleText = document.getElementById("titleText");
+const v = document.getElementById("video");
+const o = document.getElementById("overlay");
 
 const btnBack = document.getElementById("btnBack");
 const btnPlay = document.getElementById("btnPlay");
 const btnFwd  = document.getElementById("btnFwd");
-const btnSubs = document.getElementById("btnSubs");
-const btnQuality = document.getElementById("btnQuality");
 
-const seekBar = document.getElementById("seekBar");
 const seekFill = document.getElementById("seekFill");
 const seekThumb = document.getElementById("seekThumb");
+const cur = document.getElementById("cur");
+const dur = document.getElementById("dur");
 
-const curTime = document.getElementById("curTime");
-const durTime = document.getElementById("durTime");
+const sideBtns=[document.getElementById("btnSubs"),document.getElementById("btnQuality")];
+const centerBtns=[btnBack,btnPlay,btnFwd];
 
-const qMenu = document.getElementById("qMenu");
-
-let hls=null;
-let seekMode=false;
-let seekPos=0;
-
-let focusGroup="center"; 
-let centerBtns=[btnBack,btnPlay,btnFwd];
-let sideBtns=[btnSubs,btnQuality];
-let cIndex=1;
-let sIndex=-1;
-
-let qList=[],qIndex=0,qOpen=false;
-let subsOn=true;
+let focus="center",cIndex=1,sIndex=0;
+let seekMode=false,seekPos=0;
 
 function fmt(t){
-  if(!t||isNaN(t)) return "0:00";
   const m=Math.floor(t/60);
   const s=Math.floor(t%60).toString().padStart(2,"0");
   return `${m}:${s}`;
 }
 
-function showUI(){
-  overlay.classList.add("show");
-}
+function showUI(){ o.classList.add("show"); }
 
-function loadStream(url,subUrl,title){
-  titleText.textContent=title||"";
-  if(url.includes(".m3u8") && Hls.isSupported()){
-    hls=new Hls();
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_LOADED,(e,d)=>{
-      qMenu.innerHTML="";
-      qList=[{label:"AUTO",level:-1}];
-      d.levels.forEach((l,i)=>{
-        qList.push({label:`${l.height}p`,level:i});
-      });
-      qList.forEach(q=>{
-        const div=document.createElement("div");
-        div.textContent=q.label;
-        qMenu.appendChild(div);
-      });
-    });
-  }else{
-    video.src=url;
-  }
-
-  if(subUrl){
-    const t=document.createElement("track");
-    t.kind="subtitles";
-    t.src=subUrl;
-    t.default=true;
-    video.appendChild(t);
-  }
-
-  video.play();
-  showUI();
-}
-
-window.addEventListener("message",e=>{
-  const d=e.data||{};
-  if(d.type==="LOAD_STREAM"){
-    loadStream(d.url,d.subUrl,d.subLabel);
-  }
-});
-
-function updateSeekUI(){
-  if(!video.duration) return;
-  const pct=(video.currentTime/video.duration)*100;
-  seekFill.style.width=pct+"%";
-  curTime.textContent=fmt(video.currentTime);
-  durTime.textContent=fmt(video.duration);
-}
-
-video.addEventListener("timeupdate",updateSeekUI);
-
-function refreshFocus(){
-  centerBtns.forEach(b=>b.classList.remove("focus"));
-  sideBtns.forEach(b=>b.classList.remove("focus"));
+function refresh(){
+  [...centerBtns,...sideBtns].forEach(b=>b.classList.remove("focus"));
   seekThumb.classList.remove("show");
 
-  if(focusGroup==="center") centerBtns[cIndex].classList.add("focus");
-  else if(focusGroup==="side") sideBtns[sIndex].classList.add("focus");
-  else if(focusGroup==="seek") seekThumb.classList.add("show");
+  if(focus==="center") centerBtns[cIndex].classList.add("focus");
+  else if(focus==="side") sideBtns[sIndex].classList.add("focus");
+  else if(focus==="seek") seekThumb.classList.add("show");
 }
 
 document.addEventListener("keydown",e=>{
   showUI();
-
   const k=e.key;
 
   if(k==="ArrowUp"){
-    if(focusGroup==="center"){
-      focusGroup="seek";
-      seekMode=true;
-      seekPos=video.currentTime;
-    }else if(focusGroup==="side"){
-      focusGroup="center";
-      cIndex=1;
-    }
-    refreshFocus();
+    if(focus==="center"){focus="seek";seekMode=true;seekPos=v.currentTime;}
+    else if(focus==="side"){focus="center";cIndex=1;}
   }
 
   if(k==="ArrowDown"){
-    if(focusGroup==="seek"){
-      focusGroup="center";
-      seekMode=false;
-    }else if(focusGroup==="center"){
-      focusGroup="side";
-      sIndex=0;
-    }
-    refreshFocus();
+    if(focus==="seek"){focus="center";seekMode=false;}
+    else if(focus==="center"){focus="side";sIndex=0;}
   }
 
   if(k==="ArrowLeft"){
-    if(focusGroup==="center"){
-      cIndex=Math.max(0,cIndex-1);
-    }else if(focusGroup==="seek"){
-      seekPos=Math.max(0,seekPos-10);
-      video.currentTime=seekPos;
-    }else if(focusGroup==="side"){
-      sIndex=Math.max(0,sIndex-1);
-    }
-    refreshFocus();
+    if(focus==="center") cIndex=Math.max(0,cIndex-1);
+    else if(focus==="side") sIndex=Math.max(0,sIndex-1);
+    else if(focus==="seek") seekPos=Math.max(0,seekPos-10);
   }
 
   if(k==="ArrowRight"){
-    if(focusGroup==="center"){
-      cIndex=Math.min(2,cIndex+1);
-    }else if(focusGroup==="seek"){
-      seekPos=Math.min(video.duration,seekPos+10);
-      video.currentTime=seekPos;
-    }else if(focusGroup==="side"){
-      sIndex=Math.min(1,sIndex+1);
-    }
-    refreshFocus();
+    if(focus==="center") cIndex=Math.min(2,cIndex+1);
+    else if(focus==="side") sIndex=Math.min(1,sIndex+1);
+    else if(focus==="seek") seekPos=Math.min(v.duration,seekPos+10);
   }
 
   if(k==="Enter"){
-    if(focusGroup==="center"){
-      if(cIndex===0) video.currentTime-=10;
-      if(cIndex===1) video.paused?video.play():video.pause();
-      if(cIndex===2) video.currentTime+=10;
-    }else if(focusGroup==="side"){
-      if(sIndex===0){
-        subsOn=!subsOn;
-        video.textTracks[0].mode=subsOn?"showing":"disabled";
-      }
-      if(sIndex===1){
-        qOpen=!qOpen;
-        qMenu.style.display=qOpen?"block":"none";
-      }
+    if(focus==="center"){
+      if(cIndex===0) v.currentTime-=10;
+      if(cIndex===1) v.paused?v.play():v.pause();
+      if(cIndex===2) v.currentTime+=10;
+    }
+    if(focus==="side" && sIndex===0){
+      const t=v.textTracks[0];
+      if(t) t.mode=t.mode==="showing"?"disabled":"showing";
+    }
+    if(focus==="seek"){
+      v.currentTime=seekPos;
     }
   }
+
+  refresh();
 });
 
-/* R1/L1 */
-document.addEventListener("keydown",e=>{
-  if(e.key==="MediaNextTrack"||e.key==="ChannelUp") video.currentTime+=10;
-  if(e.key==="MediaPreviousTrack"||e.key==="ChannelDown") video.currentTime-=10;
+v.addEventListener("timeupdate",()=>{
+  if(!v.duration) return;
+  seekFill.style.width=(v.currentTime/v.duration*100)+"%";
+  cur.textContent=fmt(v.currentTime);
+  dur.textContent=fmt(v.duration);
+});
+
+v.addEventListener("play",()=>{
+  document.getElementById("playI").style.display="none";
+  document.getElementById("pauseI").style.display="block";
+});
+v.addEventListener("pause",()=>{
+  document.getElementById("playI").style.display="block";
+  document.getElementById("pauseI").style.display="none";
+});
+
+/* Receiver messages */
+window.addEventListener("message",e=>{
+  const d=e.data||{};
+  if(d.type==="LOAD_STREAM"){
+    v.src=d.url;
+    if(d.subUrl){
+      const t=document.createElement("track");
+      t.kind="subtitles";
+      t.src=d.subUrl;
+      t.default=true;
+      v.appendChild(t);
+    }
+    v.play();
+    showUI();
+  }
 });
 </script>
 </body>
