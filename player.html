@@ -1,447 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>GRMF Beautiful Cast Player</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8" />
+<title>GRMF Cast Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 
-  <!-- HLS -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+<style>
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: black;
+  overflow: hidden;
+  font-family: Arial, sans-serif;
+}
+video { width:100%; height:100%; background:#000; }
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+.overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,.8), transparent);
+  display: flex; flex-direction: column; justify-content: flex-end;
+  padding: 25px; opacity: 0;
+  transition: .3s ease;
+}
+.overlay.show { opacity:1; pointer-events:auto; }
 
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      overflow: hidden;
-    }
-
-    body {
-      position: relative;
-      user-select: none;
-    }
-
-    video {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      background: #000;
-    }
-
-    /* Overlay */
-    .overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(
-        to top,
-        rgba(0,0,0,0.85) 0%,
-        rgba(0,0,0,0.35) 45%,
-        rgba(0,0,0,0.15) 65%,
-        transparent 100%
-      );
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      padding: 24px 24px 20px;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 0.25s ease;
-    }
-
-    .overlay.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    /* Top info */
-    .title {
-      position: absolute;
-      top: 20px;
-      left: 24px;
-      color: white;
-      font-size: 16px;
-      font-weight: 600;
-      text-shadow: 0 6px 24px rgba(0,0,0,0.6);
-      pointer-events: none;
-    }
-
-    /* Seekbar */
-    .seek-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    .time {
-      font-size: 12px;
-      color: #ddd;
-      min-width: 50px;
-      text-align: center;
-    }
-
-    .seek-wrap {
-      flex: 1;
-      position: relative;
-    }
-
-    .seek {
-      -webkit-appearance: none;
-      width: 100%;
-      height: 4px;
-      border-radius: 999px;
-      background: rgba(255,255,255,0.35);
-      outline: none;
-      cursor: pointer;
-    }
-
-    .seek::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: #fff;
-      box-shadow: 0 0 0 4px rgba(255,255,255,0.25);
-    }
-
-    .preview {
-      position: absolute;
-      bottom: 16px;
-      left: 0;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.85);
-      color: #fff;
-      font-size: 11px;
-      padding: 3px 7px;
-      border-radius: 6px;
-      white-space: nowrap;
-      opacity: 0;
-      transition: opacity 0.12s ease, transform 0.12s ease;
-      pointer-events: none;
-    }
-
-    .preview.visible {
-      opacity: 1;
-      transform: translateX(-50%) translateY(-2px);
-    }
-
-    /* Controls */
-    .controls {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .left, .right {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-    }
-
-    .btn {
-      background: rgba(20,20,20,0.9);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 999px;
-      color: #fff;
-      padding: 10px 16px;
-      font-size: 14px;
-      min-height: 38px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transition: background 0.16s ease, transform 0.12s ease;
-    }
-
-    .btn:hover {
-      background: rgba(255,255,255,0.15);
-      transform: scale(1.03);
-    }
-
-    .main-btn {
-      font-size: 18px;
-      padding-inline: 20px;
-    }
-
-    .select {
-      background: rgba(20,20,20,0.9);
-      border: 1px solid rgba(255,255,255,0.25);
-      border-radius: 999px;
-      color: #fff;
-      padding: 8px 12px;
-      font-size: 13px;
-      min-height: 38px;
-      cursor: pointer;
-    }
-
-    .badge {
-      font-size: 12px;
-      color: #eee;
-      opacity: 0.8;
-    }
-  </style>
+.controls { display:flex; gap:10px; align-items:center; }
+button {
+  background:#111;color:#fff;border:1px solid #444;
+  padding:10px 16px;border-radius:12px;font-size:14px;
+}
+</style>
 </head>
 <body>
 
 <video id="video" crossorigin="anonymous"></video>
-
-<div class="title" id="title">Waiting for Cast…</div>
-
 <div id="overlay" class="overlay">
-  <div class="seek-row">
-    <div id="cur" class="time">0:00</div>
-
-    <div class="seek-wrap" id="seekWrap">
-      <input type="range" id="seek" class="seek" min="0" max="100" value="0">
-      <div id="preview" class="preview">0:00</div>
-    </div>
-
-    <div id="dur" class="time">0:00</div>
-  </div>
-
   <div class="controls">
-    <div class="left">
-      <button id="back" class="btn">⏪ 10s</button>
-      <button id="play" class="btn main-btn">⏸</button>
-      <button id="fwd" class="btn">10s ⏩</button>
-      <button id="mute" class="btn">🔊</button>
-    </div>
-
-    <div class="right">
-      <span id="qInfo" class="badge">Quality: auto</span>
-      <select id="quality" class="select" disabled>
-        <option value="-1">AUTO</option>
-      </select>
-    </div>
+    <button id="back">⏪ 10s</button>
+    <button id="play">⏸</button>
+    <button id="fwd">10s ⏩</button>
+    <button id="mute">🔊</button>
   </div>
 </div>
 
 <script>
-  const video = document.getElementById('video');
-  const overlay = document.getElementById('overlay');
-  const titleEl = document.getElementById('title');
+const video = document.getElementById('video');
+const overlay = document.getElementById('overlay');
+const back = document.getElementById('back');
+const play = document.getElementById('play');
+const fwd = document.getElementById('fwd');
+const mute = document.getElementById('mute');
 
-  const cur = document.getElementById('cur');
-  const dur = document.getElementById('dur');
-  const seek = document.getElementById('seek');
-  const seekWrap = document.getElementById('seekWrap');
-  const preview = document.getElementById('preview');
+let hls = null;
+let hideTimer = null;
 
-  const back = document.getElementById('back');
-  const play = document.getElementById('play');
-  const fwd = document.getElementById('fwd');
-  const mute = document.getElementById('mute');
-  const quality = document.getElementById('quality');
-  const qInfo = document.getElementById('qInfo');
+function showUI() {
+  overlay.classList.add('show');
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(() => {
+    overlay.classList.remove('show');
+  }, 3000);
+}
 
-  let hls = null;
-  let hideTimer = null;
+function reset() {
+  if (hls) { hls.destroy(); hls = null; }
+  video.pause();
+  video.removeAttribute('src');
+  video.load();
+  video.querySelectorAll('track').forEach(t => t.remove());
+}
 
-  function showUI() {
-    overlay.classList.add('visible');
-    clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => {
-      overlay.classList.remove('visible');
-    }, 3000);
-  }
+function attachSubs(url) {
+  if (!url || !url.endsWith('.vtt')) return;
+  const tr = document.createElement('track');
+  tr.kind = 'subtitles';
+  tr.src = url;
+  tr.default = true;
+  video.appendChild(tr);
+}
 
-  function format(t) {
-    if (!t || isNaN(t)) return '0:00';
-    const m = Math.floor(t / 60);
-    const s = Math.floor(t % 60).toString().padStart(2, '0');
-    return `${m}:${s}`;
-  }
+function loadStream(url, subUrl) {
+  reset();
+  if (!url) return;
 
-  function reset() {
-    if (hls) {
-      hls.destroy();
-      hls = null;
-    }
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    video.querySelectorAll('track').forEach(t => t.remove());
-
-    seek.value = 0;
-    cur.textContent = '0:00';
-    dur.textContent = '0:00';
-
-    quality.innerHTML = '<option value="-1">AUTO</option>';
-    quality.disabled = true;
-    qInfo.textContent = 'Quality: auto';
-  }
-
-  function attachSubs(url) {
-    if (!url || !url.endsWith('.vtt')) return;
-    const t = document.createElement('track');
-    t.kind = 'subtitles';
-    t.src = url;
-    t.label = 'Subtitles';
-    t.srclang = 'en';
-    t.default = true;
-    video.appendChild(t);
-  }
-
-  function loadStream(url, subUrl, subLabel) {
-    if (!url) return;
-
-    reset();
-    titleEl.textContent = 'Loading…';
-
-    const isHls = url.includes('.m3u8');
-
-    if (isHls && window.Hls && Hls.isSupported()) {
-      hls = new Hls();
-      hls.loadSource(url);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        attachSubs(subUrl);
-        video.play().catch(()=>{});
-        titleEl.textContent = '';
-        showUI();
-      });
-
-      hls.on(Hls.Events.MANIFEST_LOADED, (e, data) => {
-        const levels = data.levels || [];
-        quality.innerHTML = '<option value="-1">AUTO</option>';
-
-        levels.forEach((lvl, i) => {
-          const opt = document.createElement('option');
-          const h = lvl.height || 0;
-          const b = lvl.bitrate || 0;
-          opt.value = i.toString();
-          opt.textContent = h ? `${h}p (${Math.round(b / 1000)} kbps)` : `${Math.round(b/1000)} kbps`;
-          quality.appendChild(opt);
-        });
-
-        if (levels.length) {
-          quality.disabled = false;
-          qInfo.textContent = 'Quality: auto';
-        }
-      });
-    } else {
-      video.src = url;
+  if (url.includes('.m3u8') && Hls.isSupported()) {
+    hls = new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
       attachSubs(subUrl);
       video.play().catch(()=>{});
-      titleEl.textContent = '';
       showUI();
-    }
+    });
+  } else {
+    video.src = url;
+    attachSubs(subUrl);
+    video.play().catch(()=>{});
+    showUI();
+  }
+}
+
+// Button logic
+play.onclick = () => { video.paused ? video.play() : video.pause(); };
+back.onclick = () => video.currentTime = Math.max(0, video.currentTime - 10);
+fwd.onclick = () => video.currentTime += 10;
+mute.onclick = () => {
+  video.muted = !video.muted;
+  mute.textContent = video.muted ? '🔇' : '🔊';
+};
+
+// 🔥 Receive casts
+window.addEventListener('message', (event) => {
+  const d = event.data || {};
+
+  if (d.type === 'LOAD_STREAM') {
+    loadStream(d.url, d.subUrl);
   }
 
-  // Time updates
-  video.addEventListener('timeupdate', () => {
-    if (!video.duration) return;
-    seek.value = (video.currentTime / video.duration) * 100;
-    cur.textContent = format(video.currentTime);
-    dur.textContent = format(video.duration);
-  });
-
-  video.addEventListener('play', () => play.textContent = '⏸');
-  video.addEventListener('pause', () => play.textContent = '▶');
-
-  // Buttons
-  play.onclick = () => video.paused ? video.play() : video.pause();
-  back.onclick = () => video.currentTime = Math.max(0, video.currentTime - 10);
-  fwd.onclick = () => {
-    if (!isNaN(video.duration)) {
-      video.currentTime = Math.min(video.duration, video.currentTime + 10);
-    }
-  };
-  mute.onclick = () => {
-    video.muted = !video.muted;
-    mute.textContent = video.muted ? '🔇' : '🔊';
-  };
-
-  // Seekbar
-  seek.addEventListener('input', () => {
-    if (!video.duration) return;
-    video.currentTime = (seek.value / 100) * video.duration;
-  });
-
-  // Preview bubble
-  seekWrap.addEventListener('mousemove', (e) => {
-    if (!video.duration) return;
-    const r = seekWrap.getBoundingClientRect();
-    let p = (e.clientX - r.left) / r.width;
-    p = Math.max(0, Math.min(1, p));
-    const t = p * video.duration;
-
-    preview.textContent = format(t);
-    preview.style.left = `${p * 100}%`;
-    preview.classList.add('visible');
-  });
-
-  seekWrap.addEventListener('mouseleave', () => {
-    preview.classList.remove('visible');
-  });
-
-  // Quality change
-  quality.addEventListener('change', () => {
-    if (!hls) return;
-    const v = quality.value;
-    if (v === '-1') {
-      hls.currentLevel = -1;
-      hls.autoLevelEnabled = true;
-      qInfo.textContent = 'Quality: auto';
-    } else {
-      const i = parseInt(v, 10);
-      hls.autoLevelEnabled = false;
-      hls.currentLevel = i;
-
-      const lvl = hls.levels && hls.levels[i];
-      if (lvl) {
-        const h = lvl.height || 0;
-        const b = lvl.bitrate || 0;
-        qInfo.textContent = `Quality: ${h ? h + 'p' : Math.round(b/1000) + ' kbps'}`;
-      }
-    }
-  });
-
-  // Remote support
-  document.addEventListener('keydown', (e) => {
+  if (d.type === 'REMOTE_KEY') {
     showUI();
-
-    switch (e.key) {
+    switch (d.key) {
+      case 'Enter':
       case 'MediaPlayPause':
       case ' ':
-      case 'Enter':
         video.paused ? video.play() : video.pause();
         break;
       case 'ArrowLeft':
         video.currentTime = Math.max(0, video.currentTime - 10);
         break;
       case 'ArrowRight':
-        if (!isNaN(video.duration)) {
-          video.currentTime = Math.min(video.duration, video.currentTime + 10);
-        }
-        break;
-      case 'KeyM':
-        video.muted = !video.muted;
-        mute.textContent = video.muted ? '🔇' : '🔊';
+        video.currentTime += 10;
         break;
     }
-  });
-
-  // ====== CAST MESSAGES FROM receiver.html ======
-  window.addEventListener('message', (event) => {
-    const data = event.data || {};
-    if (data.type !== 'LOAD_STREAM') return;
-
-    loadStream(
-      data.url || '',
-      data.subUrl || '',
-      data.subLabel || 'Subtitles'
-    );
-  });
+  }
+});
 </script>
 
 </body>
