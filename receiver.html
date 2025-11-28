@@ -7,6 +7,8 @@
 
   <!-- hls.js για HLS υποστήριξη σε Chrome/Firefox κτλ -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <!-- dash.js για DASH (.mpd) -->
+  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
 
   <style>
     :root {
@@ -35,6 +37,8 @@
       background: radial-gradient(circle at top, #121b3a 0, #050814 45%, #020309 100%);
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: var(--text-main);
+      /* avoid scrollbars on TV / cast-like environments */
+      overflow: hidden;
     }
 
     body {
@@ -327,6 +331,12 @@
       pointer-events: auto;
     }
 
+    /* keep controls visible when using remote / keyboard */
+    .controls-visible .pro-controls {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
     .pro-bar {
       height: 6px;
       background: rgba(255,255,255,.2);
@@ -377,6 +387,12 @@
       transform: scale(1.05);
     }
 
+    /* focus ring for TV / keyboard navigation */
+    .pro-btn.focus-ring,
+    .pro-select.focus-ring {
+      box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent);
+    }
+
     /* Netflix-style tooltip πάνω από το seek bar */
     .pro-tooltip {
       position: absolute;
@@ -420,6 +436,20 @@
       .pro-time-label {
         display: none;
       }
+    }
+
+    /* Native subtitles styling + "safe area" */
+    video::cue {
+      background: rgba(0, 0, 0, 0.75);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 16px;
+      line-height: 1.4;
+    }
+
+    /* Move cues slightly up (Netflix-like safe area) */
+    video::-webkit-media-text-track-display {
+      transform: translateY(-8%);
     }
   </style>
 </head>
@@ -541,7 +571,44 @@
     const subToggleBtn = document.getElementById('subToggleBtn');
 
     let hlsInstance = null;
+    let dashInstance = null;
     let activeSubtitleTrack = null;
+    let hlsLevels = [];
+
+    /* focus system for TV / keyboard */
+    const focusableControls = [ppBtn, rwBtn, fwBtn, subToggleBtn, qualitySelect, muteBtn, fsBtn].filter(Boolean);
+    let focusIndex = -1;
+
+    focusableControls.forEach(el => {
+      if (el) {
+        el.setAttribute('tabindex', '-1');
+      }
+    });
+
+    function applyFocusRing() {
+      focusableControls.forEach(el => el && el.classList.remove('focus-ring'));
+      if (focusIndex >= 0 && focusIndex < focusableControls.length) {
+        const el = focusableControls[focusIndex];
+        if (el) {
+          el.classList.add('focus-ring');
+          el.focus();
+        }
+      }
+    }
+
+    function setFocus(index) {
+      if (!focusableControls.length) return;
+      if (index < 0) index = focusableControls.length - 1;
+      if (index >= focusableControls.length) index = 0;
+      focusIndex = index;
+      document.body.classList.add('controls-visible');
+      applyFocusRing();
+    }
+
+    function clearFocus() {
+      focusIndex = -1;
+      focusableControls.forEach(el => el && el.classList.remove('focus-ring'));
+    }
 
     function log(message, type = 'info') {
       if (type === 'error') {
@@ -584,7 +651,6 @@
       video.appendChild(track);
 
       activeSubtitleTrack = track;
-      // ensure visible by default
       const textTracks = video.textTracks;
       for (let i = 0; i < textTracks.length; i++) {
         textTracks[i].mode = (textTracks[i].label === track.label) ? 'showing' : 'disabled';
@@ -601,6 +667,14 @@
         hlsInstance.destroy();
         hlsInstance = null;
       }
+      hlsLevels = [];
+    }
+
+    function destroyDash() {
+      if (dashInstance && typeof dashInstance.reset === 'function') {
+        dashInstance.reset();
+      }
+      dashInstance = null;
     }
 
     function resetQualityUI() {
@@ -613,6 +687,7 @@
 
     async function loadStream(videoUrl, subUrl, subLabel) {
       destroyHls();
+      destroyDash();
       clearTracks();
       resetQualityUI();
 
@@ -625,7 +700,10 @@
       setStatus('Loading');
       infoTech.textContent = 'HTML5';
 
-      const isHls = videoUrl.toLowerCase().includes('.m3u8');
+      const urlLower = videoUrl.toLowerCase();
+      const isHls = urlLower.includes('.m3u8');
+      const isDash = urlLower.includes('.mpd');
+      const isMp4 = urlLower.includes('.mp4');
 
       if (isHls && window.Hls && window.Hls.isSupported()) {
         infoTech.textContent = 'hls.js';
@@ -656,17 +734,29 @@
 
         hlsInstance.on(Hls.Events.MANIFEST_LOADED, function (event, data) {
           log(`Manifest loaded. Found ${data.levels.length} quality levels.`);
-          // Populate quality selector
+          hlsLevels = [];
           if (qualitySelect && data.levels && data.levels.length > 0) {
             resetQualityUI();
-            data.levels.forEach((level, index) => {
+            // build sorted list but keep real HLS indices for mapping
+            hlsLevels = data.levels.map((level, index) => ({
+              index,
+              height: level.height || 0,
+              bitrate: level.bitrate || 0
+            }));
+            hlsLevels.sort((a, b) => {
+              if (a.height && b.height && a.height !== b.height) {
+                return a.height - b.height;
+              }
+              return a.bitrate - b.bitrate;
+            });
+            hlsLevels.forEach(item => {
               const opt = document.createElement('option');
-              const height = level.height || 0;
-              const bitrate = level.bitrate || 0;
-              const label = height
-                ? `${height}p`
-                : `${Math.round(bitrate / 1000)} kbps`;
-              opt.value = index.toString();
+              const labelHeight = item.height;
+              const labelBitrate = item.bitrate;
+              const label = labelHeight
+                ? `${labelHeight}p`
+                : `${Math.round(labelBitrate / 1000)} kbps`;
+              opt.value = item.index.toString(); // REAL HLS LEVEL INDEX
               opt.textContent = label;
               qualitySelect.appendChild(opt);
             });
@@ -677,18 +767,18 @@
 
         hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
           if (!hlsInstance || !hlsInstance.levels) return;
-          const level = hlsInstance.levels[data.level];
+          const levelIndex = data.level;
+          const level = hlsInstance.levels[levelIndex];
           if (level && level.height) {
             infoRes.textContent = `Resolution: ${level.height}p`;
           } else {
             infoRes.textContent = 'Resolution: auto';
           }
-          if (qualitySelect && !isNaN(data.level)) {
-            // if manual override not in auto, reflect
+          if (qualitySelect && !isNaN(levelIndex)) {
             if (hlsInstance.autoLevelEnabled) {
               qualitySelect.value = '-1';
             } else {
-              qualitySelect.value = data.level.toString();
+              qualitySelect.value = levelIndex.toString();
             }
           }
         });
@@ -704,8 +794,19 @@
         hlsInstance.loadSource(videoUrl);
         hlsInstance.attachMedia(video);
 
+      } else if (isDash && window.dashjs) {
+        infoTech.textContent = 'dash.js';
+        dashInstance = dashjs.MediaPlayer().create();
+        dashInstance.initialize(video, videoUrl, true);
+        attachSubtitles(subUrl, subLabel);
+        dashInstance.on('error', function (e) {
+          log('DASH error: ' + (e ? JSON.stringify(e) : 'unknown'), 'error');
+          setStatus('Error');
+        });
+
       } else {
-        // είτε native HLS (Safari) είτε απλό MP4
+        // Native HTML5 playback (MP4, or browser-native HLS/DASH where supported)
+        infoTech.textContent = 'HTML5';
         video.src = videoUrl;
         attachSubtitles(subUrl, subLabel);
         video.load();
@@ -726,9 +827,9 @@
 
     // Demo values button (βάλε ό,τι δικό σου θες)
     btnDemo.addEventListener('click', () => {
-      videoInput.value = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
-      subInput.value = '';
-      subLabelInput.value = 'English';
+      videoInput.value = 'https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8';
+      subInput.value = 'https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt';
+      subLabelInput.value = 'Greek';
       log('Demo values filled. Press "Load stream" to start.', 'info');
     });
 
@@ -758,22 +859,65 @@
 
     /* === PRO PLAYER CONTROLS JS === */
 
-    ppBtn.onclick = () => video.paused ? video.play() : video.pause();
-    rwBtn.onclick = () => video.currentTime -= 10;
-    fwBtn.onclick = () => video.currentTime += 10;
+    function togglePlayPause() {
+      if (video.paused) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    }
+
+    ppBtn.onclick = () => togglePlayPause();
+
+    rwBtn.onclick = () => {
+      if (!isNaN(video.currentTime)) {
+        video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+      }
+    };
+
+    fwBtn.onclick = () => {
+      if (video.duration) {
+        video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
+      }
+    };
+
     muteBtn.onclick = () => {
       video.muted = !video.muted;
       muteBtn.textContent = video.muted ? '🔇' : '🔊';
     };
 
-    fsBtn.onclick = () => {
+    function enterFullscreen() {
       const wrapper = document.querySelector('.video-wrapper');
-      if (document.fullscreenElement) {
-        document.exitFullscreen();
-      } else if (wrapper.requestFullscreen) {
-        wrapper.requestFullscreen();
+      if (!wrapper) return;
+      if (wrapper.requestFullscreen) {
+        wrapper.requestFullscreen().catch(() => {});
+      } else if (wrapper.webkitRequestFullscreen) {
+        wrapper.webkitRequestFullscreen();
+      }
+    }
+
+    fsBtn.onclick = () => {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      } else {
+        enterFullscreen();
       }
     };
+
+    // Expose fullscreen for cast / external messages
+    window.enterPlayerFullscreen = enterFullscreen;
+
+    // Optional: auto-fullscreen when sender posts a message
+    window.addEventListener('message', (event) => {
+      if (!event || !event.data) return;
+      if (event.data === 'ENTER_FULLSCREEN' || (event.data.type && event.data.type === 'ENTER_FULLSCREEN')) {
+        enterFullscreen();
+      }
+    });
 
     video.addEventListener('timeupdate', () => {
       if (!video.duration) return;
@@ -846,7 +990,7 @@
       });
     }
 
-    // Quality selector change (κανονικό HLS)
+    // Quality selector change (correct mapping to hls.currentLevel)
     if (qualitySelect) {
       qualitySelect.addEventListener('change', () => {
         if (!hlsInstance) return;
@@ -858,8 +1002,8 @@
         } else {
           const levelIndex = parseInt(value, 10);
           if (!isNaN(levelIndex)) {
-            hlsInstance.currentLevel = levelIndex;
             hlsInstance.autoLevelEnabled = false;
+            hlsInstance.currentLevel = levelIndex;
             const level = hlsInstance.levels && hlsInstance.levels[levelIndex];
             if (level && level.height) {
               infoRes.textContent = `Resolution: ${level.height}p`;
@@ -869,24 +1013,64 @@
       });
     }
 
-    // Remote / TV optimized keys (native timing, no sync hacks)
+    // Remote / TV optimized keys with focus system
     window.addEventListener('keydown', (e) => {
       const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea') return;
 
+      document.body.classList.add('controls-visible');
+
+      // Space and MediaPlayPause always toggle playback
+      if (e.key === ' ' || e.key === 'MediaPlayPause') {
+        e.preventDefault();
+        togglePlayPause();
+        return;
+      }
+
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (focusIndex >= 0 && focusIndex < focusableControls.length) {
+          const el = focusableControls[focusIndex];
+          if (el && typeof el.click === 'function') {
+            el.click();
+          }
+        } else {
+          // Enter toggles play/pause even if nothing focused
+          togglePlayPause();
+        }
+        return;
+      }
+
       switch (e.key) {
-        case ' ':
-        case 'Enter':
-        case 'MediaPlayPause':
-          e.preventDefault();
-          video.paused ? video.play() : video.pause();
-          break;
         case 'ArrowLeft':
-        case 'MediaRewind':
           e.preventDefault();
-          video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+          if (focusIndex === -1) {
+            // first use: seek AND then initialize focus navigation
+            if (!isNaN(video.currentTime)) {
+              video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+            }
+            if (focusableControls.length) setFocus(0);
+          } else {
+            setFocus(focusIndex - 1);
+          }
           break;
         case 'ArrowRight':
+          e.preventDefault();
+          if (focusIndex === -1) {
+            if (video.duration) {
+              video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
+            }
+            if (focusableControls.length) setFocus(0);
+          } else {
+            setFocus(focusIndex + 1);
+          }
+          break;
+        case 'MediaRewind':
+          e.preventDefault();
+          if (!isNaN(video.currentTime)) {
+            video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+          }
+          break;
         case 'MediaFastForward':
           e.preventDefault();
           if (video.duration) {
@@ -894,10 +1078,13 @@
           }
           break;
         case 'ArrowUp':
+          // Let quality <select> use arrows when it's the active element
+          if (document.activeElement === qualitySelect) return;
           e.preventDefault();
           video.volume = Math.min(1, (video.volume || 0) + 0.05);
           break;
         case 'ArrowDown':
+          if (document.activeElement === qualitySelect) return;
           e.preventDefault();
           video.volume = Math.max(0, (video.volume || 0) - 0.05);
           break;
