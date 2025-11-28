@@ -15,38 +15,74 @@ html,body{
   background:#000;overflow:hidden;
   font-family:system-ui,-apple-system,Segoe UI,Roboto;
 }
+
 video{
   width:100%;height:100%;
   object-fit:contain;background:#000;
 }
+
+/* HUD CENTERED */
 .hud{
-  position:absolute;left:50%;bottom:60px;
+  position:absolute;
+  left:50%;
+  bottom:60px;
   transform:translateX(-50%);
-  width:80%;opacity:0;pointer-events:none;
+  width:80%;
+  opacity:0;
+  pointer-events:none;
   transition:opacity .25s ease;
 }
-.hud.show{opacity:1;pointer-events:auto;}
+
+.hud.show{
+  opacity:1;
+  pointer-events:auto;
+}
+
 .time-row{
-  display:flex;justify-content:space-between;
-  color:white;font-size:14px;margin-bottom:6px;
+  display:flex;
+  justify-content:space-between;
+  color:white;
+  font-size:14px;
+  margin-bottom:6px;
 }
-.bar{position:relative;height:6px;background:#2a2a2a;border-radius:999px;overflow:hidden;}
+
+.bar{
+  position:relative;
+  height:6px;
+  background:#2a2a2a;
+  border-radius:999px;
+  overflow:hidden;
+}
+
 .fill{
-  position:absolute;top:0;left:0;height:100%;width:0%;
-  background:#FFD600;box-shadow:0 0 12px rgba(255,214,0,.7);
+  position:absolute;
+  top:0;left:0;height:100%;
+  width:0%;
+  background:#FFD600;
+  box-shadow:0 0 12px rgba(255,214,0,.7);
+  transition:width .08s linear;
 }
+
+/* preview bubble (ώρα μόνο, μπορείς να βάλεις thumbnails μετά) */
 .preview{
-  position:absolute;bottom:18px;transform:translateX(-50%);
-  background:rgba(0,0,0,.85);color:white;
-  padding:4px 8px;border-radius:8px;font-size:12px;
-  opacity:0;pointer-events:none;transition:.15s;
+  position:absolute;
+  bottom:18px;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.85);
+  color:white;
+  padding:4px 8px;
+  border-radius:8px;
+  font-size:12px;
+  opacity:0;
+  pointer-events:none;
+  transition:.15s;
 }
 .preview.show{opacity:1;}
 </style>
 </head>
 <body>
 
-<video id="video" playsinline webkit-playsinline crossorigin="anonymous"></video>
+<video id="video" crossorigin="anonymous"></video>
 
 <div id="hud" class="hud">
   <div class="time-row">
@@ -61,31 +97,32 @@ video{
 
 <script>
 const v = document.getElementById("video");
-v.muted = true; // 🔑 policy fix
-
 const hud = document.getElementById("hud");
 const fill = document.getElementById("fill");
-const cur  = document.getElementById("cur");
-const dur  = document.getElementById("dur");
+const cur = document.getElementById("cur");
+const dur = document.getElementById("dur");
+const bar = document.getElementById("bar");
 const preview = document.getElementById("preview");
 
-let hls=null, dash=null, hudTimer=null;
-let lastGoodTime = 0, isRecovering=false;
+let hls = null;
+let dash = null;
+let hudTimer = null;
 
 function fmt(t){
   if(!isFinite(t)) return "0:00";
   t = Math.floor(t);
-  const h=Math.floor(t/3600), m=Math.floor((t%3600)/60), s=t%60;
-  return h>0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${m}:${String(s).padStart(2,'0')}`;
+  const h = Math.floor(t/3600);
+  const m = Math.floor((t%3600)/60);
+  const s = t%60;
+  return h>0
+    ? `${h}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`
+    : `${m}:${s.toString().padStart(2,"0")}`;
 }
 
 function showHud(){
   hud.classList.add("show");
   clearTimeout(hudTimer);
-  hudTimer=setTimeout(()=>{
-    hud.classList.remove("show");
-    preview.classList.remove("show");
-  },3000);
+  hudTimer = setTimeout(()=>hud.classList.remove("show"), 3000);
 }
 
 function reset(){
@@ -95,155 +132,134 @@ function reset(){
   v.removeAttribute("src");
   v.load();
   v.querySelectorAll("track").forEach(t=>t.remove());
-  lastGoodTime=0;
 }
 
 function addSubs(url){
   if(!url) return;
-  const t=document.createElement("track");
-  t.kind="subtitles";t.src=url;t.default=true;t.srclang="en";
+  const t = document.createElement("track");
+  t.kind="subtitles";
+  t.src=url;
+  t.default=true;
+  t.srclang="en";
   v.appendChild(t);
+
   v.addEventListener("loadedmetadata",()=>{
-    [...v.textTracks].forEach(tt=>tt.mode="showing");
+    for(let i=0;i<v.textTracks.length;i++){
+      v.textTracks[i].mode="showing";
+    }
   },{once:true});
 }
 
-function loadStream(url,subUrl){
+function loadStream(url, subUrl){
   if(!url) return;
-  console.log("LOAD:",url);
   reset();
-  const low=url.toLowerCase();
+  const low = url.toLowerCase();
 
-  if(low.endsWith(".m3u8") && Hls.isSupported()){
-    hls=new Hls();
+  if(low.endsWith(".m3u8") && window.Hls && Hls.isSupported()){
+    hls = new Hls();
     hls.loadSource(url);
     hls.attachMedia(v);
-
-    hls.on(Hls.Events.MEDIA_ATTACHED,()=>{
-      console.log("HLS attached");
-    });
-
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
       addSubs(subUrl);
       v.play().catch(()=>{});
       showHud();
     });
-
-    hls.on(Hls.Events.ERROR,(e,d)=>{
-      if(d.fatal){
-        try{hls.recoverMediaError();}catch{}
-      }
-    });
   }
   else if(low.endsWith(".mpd") && window.dashjs){
-    dash=dashjs.MediaPlayer().create();
-    dash.initialize(v,url,false);
+    dash = dashjs.MediaPlayer().create();
+    dash.initialize(v, url, true);
     addSubs(subUrl);
-    v.play().catch(()=>{});
     showHud();
   }
   else {
-    v.src=url;
+    v.src = url;
     addSubs(subUrl);
     v.play().catch(()=>{});
     showHud();
   }
 }
 
+/* time update */
 v.addEventListener("timeupdate",()=>{
   if(!isFinite(v.duration)) return;
-  const p=(v.currentTime/v.duration)*100;
-  fill.style.width=p+"%";
-  cur.textContent=fmt(v.currentTime);
-  dur.textContent=fmt(v.duration);
-  if(v.currentTime>0) lastGoodTime=v.currentTime;
+  const p = (v.currentTime/v.duration)*100;
+  fill.style.width = p+"%";
+  cur.textContent = fmt(v.currentTime);
+  dur.textContent = fmt(v.duration);
 });
 
-setInterval(()=>{
-  if(!v.src||isRecovering) return;
-  if(!v.paused && v.readyState<2){
-    recover();
-  }
-},2500);
-
-["stalled","waiting","error"].forEach(e=>{
-  v.addEventListener(e,()=>!isRecovering&&recover());
-});
-
-function recover(){
-  isRecovering=true;
-  const t=lastGoodTime;
-  const src=v.currentSrc||v.src;
-  if(!src){isRecovering=false;return;}
-  v.src=src;
-  v.load();
-  v.onloadedmetadata=()=>{
-    v.currentTime=t||0;
-    v.play().catch(()=>{});
-    isRecovering=false;
-    showHud();
-  };
-}
-
+/* Seeking */
 function seek(delta){
   if(!isFinite(v.duration)) return;
-  let t=v.currentTime+delta;
-  t=Math.max(0,Math.min(v.duration,t));
-  v.currentTime=t;
-  const p=(t/v.duration)*100;
-  preview.style.left=p+"%";
-  preview.textContent=fmt(t);
+  let t = v.currentTime + delta;
+  if(t<0) t=0;
+  if(t>v.duration) t=v.duration;
+  v.currentTime = t;
+
+  const p = (t/v.duration);
+  preview.style.left = (p*100)+"%";
+  preview.textContent = fmt(t);
   preview.classList.add("show");
   showHud();
 }
 
 function togglePlay(){
-  v.paused?v.play().catch(()=>{}):v.pause();
+  v.paused ? v.play().catch(()=>{}) : v.pause();
   showHud();
 }
 
 function stopVideo(){
-  v.pause();v.currentTime=0;
+  v.pause();
+  v.currentTime=0;
   fill.style.width="0%";
   cur.textContent="0:00";
   showHud();
 }
 
+/* Remote input */
 function remote(key){
-  console.log("KEY:",key);
+  showHud();
+
   switch(key){
+
     case "ArrowLeft":
     case "MediaPreviousTrack":
     case "MediaTrackPrevious":
-    case "MediaRewind":
     case "ChannelDown":
-      seek(-10);break;
+      seek(-10);
+      break;
 
     case "ArrowRight":
     case "MediaNextTrack":
     case "MediaTrackNext":
-    case "MediaFastForward":
     case "ChannelUp":
-      seek(10);break;
+      seek(10);
+      break;
 
     case "Enter":
     case "MediaPlayPause":
-    case "MediaPlay":
-    case "MediaPause":
     case " ":
-      togglePlay();break;
+      togglePlay();
+      break;
 
     case "MediaStop":
-      stopVideo();break;
+      stopVideo();
+      break;
   }
 }
 
+/* Messages from receiver */
 window.addEventListener("message",e=>{
-  const d=e.data||{};
-  if(d.type==="LOAD_STREAM") loadStream(d.url,d.subUrl);
-  if(d.type==="REMOTE_KEY") remote(d.key);
+  const d = e.data || {};
+  if(d.type==="LOAD_STREAM"){
+    loadStream(d.url, d.subUrl);
+  }
+  if(d.type==="REMOTE_KEY"){
+    remote(d.key);
+  }
 });
 
+/* debug with keyboard in browser */
 document.addEventListener("keydown",e=>remote(e.key));
 </script>
 </body>
