@@ -1,226 +1,142 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Professional Cast Player</title>
+    <title>CAF HLS Receiver + Safe Subtitles</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
     <style>
-        html, body {
-            background: black;
+        body {
+            background-color: black;
             margin: 0;
             padding: 0;
-            width: 100%;
-            height: 100%;
             overflow: hidden;
-            font-family: Arial, sans-serif;
         }
 
-        video {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            background: black;
-        }
-
-        .overlay {
-            position: fixed;
-            bottom: 0;
-            width: 100%;
-            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            z-index: 999;
-        }
-
-        .controls {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 10px;
-        }
-
-        .left, .right {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
-
-        button, select {
-            background: rgba(20,20,20,0.9);
-            color: white;
-            border: 1px solid rgba(255,255,255,0.2);
-            padding: 10px 14px;
-            border-radius: 10px;
+        #debug {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            color: #00ffcc;
+            font-family: monospace;
             font-size: 14px;
-            cursor: pointer;
-        }
-
-        button:hover, select:hover {
-            background: rgba(50,50,50,1);
-        }
-
-        .hidden {
-            display: none !important;
-        }
-
-        #restartBtn {
-            background: #e50914;
+            padding: 10px 15px;
+            border-radius: 12px;
+            max-width: 90%;
+            z-index: 9999;
+            white-space: pre-wrap;
+            word-break: break-all;
         }
     </style>
 </head>
 <body>
 
-<video id="video"></video>
-
-<div id="ui" class="overlay hidden">
-    <div class="controls">
-        <div class="left">
-            <button id="backBtn">⏪ 10s</button>
-            <button id="playPauseBtn">⏸</button>
-            <button id="forwardBtn">10s ⏩</button>
-        </div>
-
-        <div class="right">
-            <button id="subsBtn">SUBS: ON</button>
-
-            <select id="qualitySelect">
-                <option value="auto">AUTO</option>
-                <option value="low">LOW</option>
-                <option value="mid">MEDIUM</option>
-                <option value="high">HIGH</option>
-            </select>
-
-            <button id="restartBtn" class="hidden">🔁 RESTART</button>
-        </div>
-    </div>
-</div>
+<div id="debug">Waiting for cast data...</div>
+<cast-media-player></cast-media-player>
 
 <script>
     const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
+    const debug = document.getElementById('debug');
 
-    const video = document.getElementById('video');
-    const ui = document.getElementById('ui');
-
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const backBtn = document.getElementById('backBtn');
-    const forwardBtn = document.getElementById('forwardBtn');
-    const subsBtn = document.getElementById('subsBtn');
-    const qualitySelect = document.getElementById('qualitySelect');
-    const restartBtn = document.getElementById('restartBtn');
+    function log(msg) {
+        debug.textContent = msg;
+        console.log(msg);
+    }
 
     const context = cast.framework.CastReceiverContext.getInstance();
     const playerManager = context.getPlayerManager();
 
-    let currentVideoUrl = '';
-    let currentSubUrl = '';
-    let subsEnabled = true;
+    let pendingSubUrl = "";
 
-    function showUI() {
-        ui.classList.remove('hidden');
-    }
+    log('Receiver ready. Waiting for stream...');
 
-    function hideRestart() {
-        restartBtn.classList.add('hidden');
-    }
+    // Debug player events
+    playerManager.addEventListener(
+        cast.framework.events.EventType.LOAD_START,
+        () => log('LOAD_START… loading stream...')
+    );
 
-    function showRestart() {
-        restartBtn.classList.remove('hidden');
-    }
+    playerManager.addEventListener(
+        cast.framework.events.EventType.LOADED_DATA,
+        () => log('LOADED_DATA ✅ video frames loaded')
+    );
 
+    playerManager.addEventListener(
+        cast.framework.events.EventType.ERROR,
+        (e) => log('PLAYER ERROR: ' + JSON.stringify(e))
+    );
+
+    // Receive message from sender (your Android app)
     context.addCustomMessageListener(NAMESPACE, function (event) {
         try {
-            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+            const data = typeof event.data === 'string'
+                ? JSON.parse(event.data)
+                : event.data;
 
             const videoUrl = data.url || '';
-            const subUrl = data.subUrl || '';
+            const subUrl   = data.subUrl || '';
 
-            if (!videoUrl) return;
+            log('Received:\nVIDEO: ' + videoUrl + '\nSUB: ' + subUrl);
 
-            currentVideoUrl = videoUrl;
-            currentSubUrl = subUrl;
-            subsEnabled = true;
+            if (!videoUrl || !videoUrl.includes('.m3u8')) {
+                log('ERROR: Invalid video URL');
+                return;
+            }
 
             const mediaInfo = new cast.framework.messages.MediaInformation(videoUrl);
             mediaInfo.contentType = 'application/x-mpegURL';
             mediaInfo.streamType = cast.framework.messages.StreamType.BUFFERED;
 
-            if (subUrl) {
-                const track = new cast.framework.messages.Track(1, cast.framework.messages.TrackType.TEXT);
-                track.trackContentId = subUrl;
+            const request = new cast.framework.messages.LoadRequestData();
+            request.media = mediaInfo;
+            request.autoplay = true;
+
+            pendingSubUrl = subUrl;
+
+            playerManager.load(request);
+
+            log('Video loading…');
+
+        } catch (e) {
+            log('Receiver error: ' + e.message);
+        }
+    });
+
+    // Once video is really loaded → attach subs safely
+    playerManager.addEventListener(
+        cast.framework.events.EventType.LOADED_DATA,
+        function () {
+            if (!pendingSubUrl || !pendingSubUrl.endsWith('.vtt')) {
+                log('No valid subtitles to load.');
+                return;
+            }
+
+            try {
+                const track = new cast.framework.messages.Track(
+                    1,
+                    cast.framework.messages.TrackType.TEXT
+                );
+
+                track.trackContentId = pendingSubUrl;
                 track.trackContentType = 'text/vtt';
                 track.subtype = cast.framework.messages.TextTrackType.SUBTITLES;
                 track.name = 'Subtitles';
                 track.language = 'el';
-                mediaInfo.tracks = [track];
+
+                const media = playerManager.getMediaInformation();
+                media.tracks = [track];
+                media.textTrackStyle = new cast.framework.messages.TextTrackStyle();
+
+                playerManager.setActiveTrackIds([1]);
+
+                log('✅ Subtitles attached after video load.');
+            } catch (e) {
+                log('Subtitle attach failed: ' + e.message);
             }
-
-            const request = new cast.framework.messages.LoadRequestData();
-            request.media = mediaInfo;
-            request.autoplay = true;
-            request.activeTrackIds = subUrl ? [1] : [];
-
-            playerManager.load(request);
-
-            showUI();
-            hideRestart();
-
-        } catch (e) {}
-    });
-
-    // ==== CONTROLS ====
-
-    playPauseBtn.onclick = () => {
-        if (video.paused) {
-            video.play();
-            playPauseBtn.textContent = '⏸';
-        } else {
-            video.pause();
-            playPauseBtn.textContent = '▶';
         }
-    };
-
-    backBtn.onclick = () => {
-        video.currentTime = Math.max(video.currentTime - 10, 0);
-    };
-
-    forwardBtn.onclick = () => {
-        video.currentTime += 10;
-    };
-
-    subsBtn.onclick = () => {
-        subsEnabled = !subsEnabled;
-        subsBtn.textContent = subsEnabled ? 'SUBS: ON' : 'SUBS: OFF';
-
-        const active = subsEnabled ? [1] : [];
-
-        playerManager.setActiveTrackIds(active);
-    };
-
-    qualitySelect.onchange = () => {
-        const q = qualitySelect.value;
-
-        if (q === 'auto') playerManager.setActiveTrackIds([]);
-        if (q === 'low') playerManager.setActiveAudioTrackIds([0]);
-        if (q === 'mid') playerManager.setActiveAudioTrackIds([1]);
-        if (q === 'high') playerManager.setActiveAudioTrackIds([2]);
-    };
-
-    restartBtn.onclick = () => {
-        video.currentTime = 0;
-        video.play();
-        hideRestart();
-    };
-
-    video.addEventListener('ended', () => {
-        showRestart();
-    });
+    );
 
     context.start();
 </script>
