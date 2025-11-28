@@ -303,6 +303,73 @@
     .log-error {
       color: var(--danger);
     }
+
+/* === PRO CUSTOM VIDEO CONTROLS === */
+video::-webkit-media-controls {
+  display: none !important;
+}
+
+.pro-controls {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 16px;
+  background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s ease;
+}
+
+.video-wrapper:hover .pro-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.pro-bar {
+  height: 6px;
+  background: rgba(255,255,255,.2);
+  border-radius: 999px;
+  cursor: pointer;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.pro-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+}
+
+.pro-buttons {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pro-left,
+.pro-right {
+  display: flex;
+  gap: 10px;
+}
+
+.pro-btn {
+  background: rgba(0,0,0,.65);
+  border: none;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: .15s ease;
+}
+
+.pro-btn:hover {
+  background: rgba(30,144,255,.7);
+  transform: scale(1.05);
+}
+    
   </style>
 </head>
 <body>
@@ -355,6 +422,31 @@
     <div class="main">
       <div class="video-wrapper">
         <video id="video" controls crossorigin="anonymous"></video>
+        <div class="pro-controls">
+
+  <div></div>
+
+  <div>
+    <div class="pro-bar" id="proBar">
+      <div class="pro-fill" id="proFill"></div>
+    </div>
+
+    <div class="pro-buttons">
+      <div class="pro-left">
+        <button class="pro-btn" id="ppBtn">▶</button>
+        <button class="pro-btn" id="rwBtn">«10</button>
+        <button class="pro-btn" id="fwBtn">10»</button>
+      </div>
+
+      <div class="pro-right">
+        <button class="pro-btn" id="muteBtn">🔊</button>
+        <button class="pro-btn" id="fsBtn">⛶</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
         <div class="overlay-info">
           <span id="info-res">Resolution: auto</span>
           <span class="chip" id="info-tech">HTML5</span>
@@ -523,6 +615,48 @@
       log('Video error: ' + (err ? err.code : 'unknown'), 'error');
       setStatus('Error');
     });
+    /* === PRO PLAYER CONTROLS JS === */
+
+const ppBtn = document.getElementById('ppBtn');
+const rwBtn = document.getElementById('rwBtn');
+const fwBtn = document.getElementById('fwBtn');
+const muteBtn = document.getElementById('muteBtn');
+const fsBtn = document.getElementById('fsBtn');
+const proBar = document.getElementById('proBar');
+const proFill = document.getElementById('proFill');
+
+ppBtn.onclick = () => video.paused ? video.play() : video.pause();
+rwBtn.onclick = () => video.currentTime -= 10;
+fwBtn.onclick = () => video.currentTime += 10;
+muteBtn.onclick = () => video.muted = !video.muted;
+
+fsBtn.onclick = () => {
+  const wrapper = document.querySelector('.video-wrapper');
+  document.fullscreenElement
+    ? document.exitFullscreen()
+    : wrapper.requestFullscreen();
+};
+
+video.addEventListener('timeupdate', () => {
+  if (!video.duration) return;
+  const percent = (video.currentTime / video.duration) * 100;
+  proFill.style.width = percent + '%';
+});
+
+video.addEventListener('play', () => {
+  ppBtn.textContent = '⏸';
+});
+
+video.addEventListener('pause', () => {
+  ppBtn.textContent = '▶';
+});
+
+proBar.addEventListener('click', (e) => {
+  const rect = proBar.getBoundingClientRect();
+  const pos = (e.clientX - rect.left) / rect.width;
+  video.currentTime = pos * video.duration;
+});
+
   </script>
 </body>
 </html>
