@@ -1,313 +1,266 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>GRMF Simple Cast Player</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="UTF-8">
+<title>GRMF Cast Player</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- HLS + DASH -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+<script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
 
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background: #000;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      overflow: hidden;
-    }
+<style>
+html,body{
+  margin:0;padding:0;
+  width:100%;height:100%;
+  background:#000;overflow:hidden;
+  font-family:system-ui,-apple-system,Segoe UI,Roboto;
+}
 
-    video {
-      width: 100%;
-      height: 100%;
-      background: #000;
-      object-fit: contain;
-    }
+video{
+  width:100%;height:100%;
+  object-fit:contain;background:#000;
+}
 
-    /* HUD */
-    .hud {
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      padding: 10px 32px 18px;
-      background: linear-gradient(to top, rgba(0,0,0,0.85), transparent);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-    }
+/* HUD CENTERED */
+.hud{
+  position:absolute;
+  left:50%;
+  bottom:60px;
+  transform:translateX(-50%);
+  width:80%;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity .25s ease;
+}
 
-    .hud.visible {
-      opacity: 1;
-      pointer-events: auto;
-    }
+.hud.show{
+  opacity:1;
+  pointer-events:auto;
+}
 
-    .time-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: 13px;
-      color: #f5f5f5;
-    }
+.time-row{
+  display:flex;
+  justify-content:space-between;
+  color:white;
+  font-size:14px;
+  margin-bottom:6px;
+}
 
-    .bar-wrap {
-      position: relative;
-      height: 6px;
-      border-radius: 999px;
-      background: rgba(148,163,184,0.35);
-      overflow: hidden;
-    }
+.bar{
+  position:relative;
+  height:6px;
+  background:#2a2a2a;
+  border-radius:999px;
+  overflow:hidden;
+}
 
-    .bar-fill {
-      position: absolute;
-      left: 0;
-      top: 0;
-      height: 100%;
-      width: 0%;
-      border-radius: 999px;
-      background: #facc15;
-      box-shadow: 0 0 10px rgba(250,204,21,0.7);
-      transition: width 0.08s linear;
-    }
+.fill{
+  position:absolute;
+  top:0;left:0;height:100%;
+  width:0%;
+  background:#FFD600;
+  box-shadow:0 0 12px rgba(255,214,0,.7);
+  transition:width .08s linear;
+}
 
-    /* Preview bubble (για μελλοντικά thumbnails) */
-    .preview {
-      position: absolute;
-      bottom: 18px;
-      transform: translateX(-50%);
-      background: rgba(0,0,0,0.9);
-      color: #fff;
-      padding: 4px 8px;
-      border-radius: 8px;
-      font-size: 11px;
-      white-space: nowrap;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.12s ease, transform 0.12s ease;
-    }
-
-    .preview.visible {
-      opacity: 1;
-      transform: translateX(-50%) translateY(-2px);
-    }
-  </style>
+/* preview bubble (ώρα μόνο, μπορείς να βάλεις thumbnails μετά) */
+.preview{
+  position:absolute;
+  bottom:18px;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.85);
+  color:white;
+  padding:4px 8px;
+  border-radius:8px;
+  font-size:12px;
+  opacity:0;
+  pointer-events:none;
+  transition:.15s;
+}
+.preview.show{opacity:1;}
+</style>
 </head>
 <body>
 
 <video id="video" crossorigin="anonymous"></video>
 
 <div id="hud" class="hud">
-  <div class="bar-wrap" id="barWrap">
-    <div id="barFill" class="bar-fill"></div>
-    <div id="preview" class="preview">0:00</div>
-  </div>
   <div class="time-row">
-    <div id="curTime">0:00</div>
-    <div id="durTime">0:00</div>
+    <div id="cur">0:00</div>
+    <div id="dur">0:00</div>
+  </div>
+  <div class="bar" id="bar">
+    <div id="fill" class="fill"></div>
+    <div id="preview" class="preview">0:00</div>
   </div>
 </div>
 
 <script>
-  const video = document.getElementById('video');
-  const hud = document.getElementById('hud');
-  const barWrap = document.getElementById('barWrap');
-  const barFill = document.getElementById('barFill');
-  const preview = document.getElementById('preview');
-  const curTimeEl = document.getElementById('curTime');
-  const durTimeEl = document.getElementById('durTime');
+const v = document.getElementById("video");
+const hud = document.getElementById("hud");
+const fill = document.getElementById("fill");
+const cur = document.getElementById("cur");
+const dur = document.getElementById("dur");
+const bar = document.getElementById("bar");
+const preview = document.getElementById("preview");
 
-  let hls = null;
-  let dashPlayer = null;
-  let hudTimer = null;
+let hls = null;
+let dash = null;
+let hudTimer = null;
 
-  // Helper: format time
-  function formatTime(sec) {
-    if (!sec || !isFinite(sec)) return '0:00';
-    sec = Math.floor(sec);
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    if (h > 0) {
-      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    } else {
-      return `${m}:${s.toString().padStart(2, '0')}`;
+function fmt(t){
+  if(!isFinite(t)) return "0:00";
+  t = Math.floor(t);
+  const h = Math.floor(t/3600);
+  const m = Math.floor((t%3600)/60);
+  const s = t%60;
+  return h>0
+    ? `${h}:${m.toString().padStart(2,"0")}:${s.toString().padStart(2,"0")}`
+    : `${m}:${s.toString().padStart(2,"0")}`;
+}
+
+function showHud(){
+  hud.classList.add("show");
+  clearTimeout(hudTimer);
+  hudTimer = setTimeout(()=>hud.classList.remove("show"), 3000);
+}
+
+function reset(){
+  if(hls){hls.destroy();hls=null;}
+  if(dash){dash.reset();dash=null;}
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+  v.querySelectorAll("track").forEach(t=>t.remove());
+}
+
+function addSubs(url){
+  if(!url) return;
+  const t = document.createElement("track");
+  t.kind="subtitles";
+  t.src=url;
+  t.default=true;
+  t.srclang="en";
+  v.appendChild(t);
+
+  v.addEventListener("loadedmetadata",()=>{
+    for(let i=0;i<v.textTracks.length;i++){
+      v.textTracks[i].mode="showing";
     }
-  }
+  },{once:true});
+}
 
-  function showHud() {
-    hud.classList.add('visible');
-    clearTimeout(hudTimer);
-    hudTimer = setTimeout(() => {
-      hud.classList.remove('visible');
-      preview.classList.remove('visible');
-    }, 3000);
-  }
+function loadStream(url, subUrl){
+  if(!url) return;
+  reset();
+  const low = url.toLowerCase();
 
-  function resetPlayers() {
-    if (hls) {
-      hls.destroy();
-      hls = null;
-    }
-    if (dashPlayer) {
-      dashPlayer.reset();
-      dashPlayer = null;
-    }
-    video.pause();
-    video.removeAttribute('src');
-    video.load();
-    video.querySelectorAll('track').forEach(t => t.remove());
-  }
-
-  function attachSubtitles(subUrl, subLabel) {
-    if (!subUrl) return;
-    if (!subLabel) subLabel = 'Subtitles';
-
-    const track = document.createElement('track');
-    track.kind = 'subtitles';
-    track.label = subLabel;
-    track.srclang = 'en';
-    track.src = subUrl;
-    track.default = true;
-    video.appendChild(track);
-
-    // force show, αν το υποστηρίζει
-    video.addEventListener('loadedmetadata', () => {
-      if (video.textTracks) {
-        for (let i = 0; i < video.textTracks.length; i++) {
-          video.textTracks[i].mode = 'showing';
-        }
-      }
-    }, { once: true });
-  }
-
-  function loadStream(url, subUrl, subLabel) {
-    if (!url) return;
-    resetPlayers();
-
-    const lower = url.toLowerCase();
-
-    if (lower.endsWith('.m3u8') && window.Hls && Hls.isSupported()) {
-      hls = new Hls();
-      hls.loadSource(url);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        attachSubtitles(subUrl, subLabel);
-        video.play().catch(()=>{});
-        showHud();
-      });
-    } else if (lower.endsWith('.mpd') && window.dashjs) {
-      dashPlayer = dashjs.MediaPlayer().create();
-      dashPlayer.initialize(video, url, true);
-      attachSubtitles(subUrl, subLabel);
+  if(low.endsWith(".m3u8") && window.Hls && Hls.isSupported()){
+    hls = new Hls();
+    hls.loadSource(url);
+    hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+      addSubs(subUrl);
+      v.play().catch(()=>{});
       showHud();
-    } else {
-      // mp4 ή οτιδήποτε άλλο που παίζει native
-      video.src = url;
-      attachSubtitles(subUrl, subLabel);
-      video.play().catch(()=>{});
-      showHud();
-    }
+    });
   }
-
-  // Time update → bar + labels
-  video.addEventListener('timeupdate', () => {
-    if (!video.duration || !isFinite(video.duration)) return;
-    const pct = (video.currentTime / video.duration) * 100;
-    barFill.style.width = `${pct}%`;
-    curTimeEl.textContent = formatTime(video.currentTime);
-    durTimeEl.textContent = formatTime(video.duration);
-  });
-
-  video.addEventListener('loadedmetadata', () => {
-    durTimeEl.textContent = formatTime(video.duration);
-  });
-
-  // Simple seek with preview text (όχι real thumbnail, για να μην έχουμε CORS προβλήματα)
-  function seekBy(delta) {
-    if (!isFinite(video.duration)) return;
-    let t = (video.currentTime || 0) + delta;
-    if (t < 0) t = 0;
-    if (t > video.duration) t = video.duration;
-    video.currentTime = t;
-
-    // position preview πάνω από το bar
-    const rect = barWrap.getBoundingClientRect();
-    const p = video.duration ? (t / video.duration) : 0;
-    const x = rect.left + rect.width * p;
-    preview.style.left = `${p * 100}%`;
-    preview.textContent = formatTime(t);
-    preview.classList.add('visible');
+  else if(low.endsWith(".mpd") && window.dashjs){
+    dash = dashjs.MediaPlayer().create();
+    dash.initialize(v, url, true);
+    addSubs(subUrl);
     showHud();
   }
-
-  function togglePlay() {
-    if (video.paused) video.play().catch(()=>{});
-    else video.pause();
+  else {
+    v.src = url;
+    addSubs(subUrl);
+    v.play().catch(()=>{});
     showHud();
   }
+}
 
-  function stopPlayback() {
-    video.pause();
-    video.currentTime = 0;
-    barFill.style.width = '0%';
-    curTimeEl.textContent = '0:00';
-    showHud();
+/* time update */
+v.addEventListener("timeupdate",()=>{
+  if(!isFinite(v.duration)) return;
+  const p = (v.currentTime/v.duration)*100;
+  fill.style.width = p+"%";
+  cur.textContent = fmt(v.currentTime);
+  dur.textContent = fmt(v.duration);
+});
+
+/* Seeking */
+function seek(delta){
+  if(!isFinite(v.duration)) return;
+  let t = v.currentTime + delta;
+  if(t<0) t=0;
+  if(t>v.duration) t=v.duration;
+  v.currentTime = t;
+
+  const p = (t/v.duration);
+  preview.style.left = (p*100)+"%";
+  preview.textContent = fmt(t);
+  preview.classList.add("show");
+  showHud();
+}
+
+function togglePlay(){
+  v.paused ? v.play().catch(()=>{}) : v.pause();
+  showHud();
+}
+
+function stopVideo(){
+  v.pause();
+  v.currentTime=0;
+  fill.style.width="0%";
+  cur.textContent="0:00";
+  showHud();
+}
+
+/* Remote input */
+function remote(key){
+  showHud();
+
+  switch(key){
+
+    case "ArrowLeft":
+    case "MediaPreviousTrack":
+    case "MediaTrackPrevious":
+    case "ChannelDown":
+      seek(-10);
+      break;
+
+    case "ArrowRight":
+    case "MediaNextTrack":
+    case "MediaTrackNext":
+    case "ChannelUp":
+      seek(10);
+      break;
+
+    case "Enter":
+    case "MediaPlayPause":
+    case " ":
+      togglePlay();
+      break;
+
+    case "MediaStop":
+      stopVideo();
+      break;
   }
+}
 
-  // Handle REMOTE_KEY messages from receiver.html
-  function handleRemoteKey(key) {
-    showHud();
-
-    switch (key) {
-      case 'MediaPlayPause':
-      case 'Enter':
-      case ' ':
-        togglePlay();
-        break;
-
-      case 'ArrowLeft':
-      case 'MediaPreviousTrack':
-      case 'MediaTrackPrevious':
-      case 'ChannelDown':
-        seekBy(-10);
-        break;
-
-      case 'ArrowRight':
-      case 'MediaNextTrack':
-      case 'MediaTrackNext':
-      case 'ChannelUp':
-        seekBy(10);
-        break;
-
-      case 'MediaStop':
-        stopPlayback();
-        break;
-    }
+/* Messages from receiver */
+window.addEventListener("message",e=>{
+  const d = e.data || {};
+  if(d.type==="LOAD_STREAM"){
+    loadStream(d.url, d.subUrl);
   }
+  if(d.type==="REMOTE_KEY"){
+    remote(d.key);
+  }
+});
 
-  // Messages from receiver.html
-  window.addEventListener('message', (event) => {
-    const data = event.data || {};
-
-    if (data.type === 'LOAD_STREAM') {
-      loadStream(data.url || '', data.subUrl || '', data.subLabel || '');
-    }
-
-    if (data.type === 'REMOTE_KEY') {
-      handleRemoteKey(data.key);
-    }
-  });
-
-  // Για debug σε browser με πληκτρολόγιο
-  document.addEventListener('keydown', (e) => {
-    handleRemoteKey(e.key);
-  });
+/* debug with keyboard in browser */
+document.addEventListener("keydown",e=>remote(e.key));
 </script>
-
 </body>
 </html>
