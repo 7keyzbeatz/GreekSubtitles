@@ -1,141 +1,573 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<title>GRMF Cast Player</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
+  <meta charset="UTF-8" />
+  <title>GRMF Cast Player</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 
-<style>
-html, body {
-  margin: 0;
-  width: 100%;
-  height: 100%;
-  background: black;
-  overflow: hidden;
-  font-family: Arial, sans-serif;
-}
-video { width:100%; height:100%; background:#000; }
+  <style>
+    * { box-sizing: border-box; }
 
-.overlay {
-  position: absolute; inset: 0;
-  background: linear-gradient(to top, rgba(0,0,0,.8), transparent);
-  display: flex; flex-direction: column; justify-content: flex-end;
-  padding: 25px; opacity: 0;
-  transition: .3s ease;
-}
-.overlay.show { opacity:1; pointer-events:auto; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+    }
 
-.controls { display:flex; gap:10px; align-items:center; }
-button {
-  background:#111;color:#fff;border:1px solid #444;
-  padding:10px 16px;border-radius:12px;font-size:14px;
-}
-</style>
+    body {
+      position: relative;
+      user-select: none;
+    }
+
+    video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #000;
+    }
+
+    /* Overlay */
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0.1), transparent);
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 24px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .title {
+      position: absolute;
+      top: 16px;
+      left: 24px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      text-shadow: 0 6px 20px rgba(0,0,0,0.7);
+      pointer-events: none;
+    }
+
+    /* Time + seekbar row */
+    .seek-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .time-label {
+      font-size: 12px;
+      color: #f5f5f5;
+      min-width: 60px;
+      text-align: center;
+    }
+
+    .seek-wrap {
+      flex: 1;
+      position: relative;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 4px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.35);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.25);
+    }
+
+    .preview {
+      position: absolute;
+      bottom: 18px;
+      left: 0;
+      transform: translateX(-50%);
+      padding: 3px 7px;
+      background: rgba(0,0,0,0.85);
+      color: #fff;
+      font-size: 11px;
+      border-radius: 6px;
+      white-space: nowrap;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s ease, transform 0.12s ease;
+    }
+
+    .preview.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-2px);
+    }
+
+    /* Controls row */
+    .controls {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .left, .right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn, .select {
+      background: rgba(20,20,20,0.9);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 999px;
+      color: #fff;
+      padding: 9px 15px;
+      font-size: 14px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.16s ease, transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .btn:hover, .select:hover {
+      background: rgba(255,255,255,0.18);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.6);
+    }
+
+    .btn-main {
+      font-size: 18px;
+      padding-inline: 20px;
+    }
+
+    .select {
+      min-width: 130px;
+    }
+
+    .badge {
+      font-size: 12px;
+      color: #ddd;
+      opacity: 0.8;
+    }
+
+    /* Focus ring for remote selection */
+    .focus-ring {
+      box-shadow: 0 0 0 2px rgba(30,144,255,0.3), 0 0 0 1px #1e90ff;
+    }
+  </style>
 </head>
 <body>
 
 <video id="video" crossorigin="anonymous"></video>
+
+<div id="title" class="title">Waiting for Cast…</div>
+
 <div id="overlay" class="overlay">
+  <div class="seek-row">
+    <div id="curTime" class="time-label">0:00</div>
+
+    <div id="seekWrap" class="seek-wrap">
+      <input id="seek" type="range" min="0" max="100" value="0">
+      <div id="preview" class="preview">0:00</div>
+    </div>
+
+    <div id="durTime" class="time-label">0:00</div>
+  </div>
+
   <div class="controls">
-    <button id="back">⏪ 10s</button>
-    <button id="play">⏸</button>
-    <button id="fwd">10s ⏩</button>
-    <button id="mute">🔊</button>
+    <div class="left">
+      <button id="btnBack" class="btn">⏪ 10s</button>
+      <button id="btnPlay" class="btn btn-main">⏸</button>
+      <button id="btnFwd" class="btn">10s ⏩</button>
+      <button id="btnRestart" class="btn">⟲ Restart</button>
+    </div>
+    <div class="right">
+      <button id="btnSubs" class="btn">Subs: On</button>
+      <span id="qInfo" class="badge">Quality: auto</span>
+      <select id="quality" class="select" disabled>
+        <option value="-1">AUTO</option>
+      </select>
+      <button id="btnMute" class="btn">🔊</button>
+    </div>
   </div>
 </div>
 
 <script>
-const video = document.getElementById('video');
-const overlay = document.getElementById('overlay');
-const back = document.getElementById('back');
-const play = document.getElementById('play');
-const fwd = document.getElementById('fwd');
-const mute = document.getElementById('mute');
+  const video = document.getElementById('video');
+  const overlay = document.getElementById('overlay');
+  const titleEl = document.getElementById('title');
 
-let hls = null;
-let hideTimer = null;
+  const curTimeEl = document.getElementById('curTime');
+  const durTimeEl = document.getElementById('durTime');
+  const seek = document.getElementById('seek');
+  const seekWrap = document.getElementById('seekWrap');
+  const preview = document.getElementById('preview');
 
-function showUI() {
-  overlay.classList.add('show');
-  clearTimeout(hideTimer);
-  hideTimer = setTimeout(() => {
-    overlay.classList.remove('show');
-  }, 3000);
-}
+  const btnBack = document.getElementById('btnBack');
+  const btnPlay = document.getElementById('btnPlay');
+  const btnFwd = document.getElementById('btnFwd');
+  const btnRestart = document.getElementById('btnRestart');
+  const btnSubs = document.getElementById('btnSubs');
+  const btnMute = document.getElementById('btnMute');
+  const quality = document.getElementById('quality');
+  const qInfo = document.getElementById('qInfo');
 
-function reset() {
-  if (hls) { hls.destroy(); hls = null; }
-  video.pause();
-  video.removeAttribute('src');
-  video.load();
-  video.querySelectorAll('track').forEach(t => t.remove());
-}
+  let hls = null;
+  let hideTimer = null;
+  let subsEnabled = true;
 
-function attachSubs(url) {
-  if (!url || !url.endsWith('.vtt')) return;
-  const tr = document.createElement('track');
-  tr.kind = 'subtitles';
-  tr.src = url;
-  tr.default = true;
-  video.appendChild(tr);
-}
+  // Focus system for remote: order of focusable controls
+  const focusables = [
+    btnBack,
+    btnPlay,
+    btnFwd,
+    btnRestart,
+    btnSubs,
+    quality,
+    btnMute
+  ];
+  let focusIndex = -1;
 
-function loadStream(url, subUrl) {
-  reset();
-  if (!url) return;
-
-  if (url.includes('.m3u8') && Hls.isSupported()) {
-    hls = new Hls();
-    hls.loadSource(url);
-    hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      attachSubs(subUrl);
-      video.play().catch(()=>{});
-      showUI();
-    });
-  } else {
-    video.src = url;
-    attachSubs(subUrl);
-    video.play().catch(()=>{});
-    showUI();
-  }
-}
-
-// Button logic
-play.onclick = () => { video.paused ? video.play() : video.pause(); };
-back.onclick = () => video.currentTime = Math.max(0, video.currentTime - 10);
-fwd.onclick = () => video.currentTime += 10;
-mute.onclick = () => {
-  video.muted = !video.muted;
-  mute.textContent = video.muted ? '🔇' : '🔊';
-};
-
-// 🔥 Receive casts
-window.addEventListener('message', (event) => {
-  const d = event.data || {};
-
-  if (d.type === 'LOAD_STREAM') {
-    loadStream(d.url, d.subUrl);
-  }
-
-  if (d.type === 'REMOTE_KEY') {
-    showUI();
-    switch (d.key) {
-      case 'Enter':
-      case 'MediaPlayPause':
-      case ' ':
-        video.paused ? video.play() : video.pause();
-        break;
-      case 'ArrowLeft':
-        video.currentTime = Math.max(0, video.currentTime - 10);
-        break;
-      case 'ArrowRight':
-        video.currentTime += 10;
-        break;
+  function setFocus(index) {
+    focusables.forEach(el => el && el.classList.remove('focus-ring'));
+    if (index < 0 || index >= focusables.length) {
+      focusIndex = -1;
+      return;
+    }
+    focusIndex = index;
+    const el = focusables[focusIndex];
+    if (el) {
+      el.classList.add('focus-ring');
     }
   }
-});
+
+  function moveFocus(delta) {
+    if (!focusables.length) return;
+    if (focusIndex === -1) {
+      focusIndex = 0;
+    } else {
+      focusIndex = (focusIndex + delta + focusables.length) % focusables.length;
+    }
+    setFocus(focusIndex);
+  }
+
+  function showUI() {
+    overlay.classList.add('visible');
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      overlay.classList.remove('visible');
+      setFocus(-1);
+    }, 3500);
+  }
+
+  function fmt(t) {
+    if (!t || isNaN(t)) return '0:00';
+    const m = Math.floor(t / 60);
+    const s = Math.floor(t % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function resetPlayer() {
+    if (hls) {
+      hls.destroy();
+      hls = null;
+    }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    video.querySelectorAll('track').forEach(t => t.remove());
+    seek.value = 0;
+    curTimeEl.textContent = '0:00';
+    durTimeEl.textContent = '0:00';
+    quality.innerHTML = '<option value="-1">AUTO</option>';
+    quality.disabled = true;
+    qInfo.textContent = 'Quality: auto';
+    subsEnabled = true;
+    btnSubs.textContent = 'Subs: On';
+  }
+
+  function attachSubs(url, label) {
+    if (!url || !url.endsWith('.vtt')) return;
+    const t = document.createElement('track');
+    t.kind = 'subtitles';
+    t.label = label || 'Subtitles';
+    t.srclang = 'el';
+    t.src = url;
+    t.default = true;
+    video.appendChild(t);
+
+    // force showing
+    if (video.textTracks) {
+      for (let i = 0; i < video.textTracks.length; i++) {
+        video.textTracks[i].mode = 'showing';
+      }
+    }
+    subsEnabled = true;
+    btnSubs.textContent = 'Subs: On';
+  }
+
+  function toggleSubs() {
+    if (!video.textTracks || video.textTracks.length === 0) return;
+    subsEnabled = !subsEnabled;
+    for (let i = 0; i < video.textTracks.length; i++) {
+      video.textTracks[i].mode = subsEnabled ? 'showing' : 'disabled';
+    }
+    btnSubs.textContent = subsEnabled ? 'Subs: On' : 'Subs: Off';
+  }
+
+  function loadStream(url, subUrl, subLabel) {
+    if (!url) return;
+    resetPlayer();
+    titleEl.textContent = 'Loading…';
+
+    const isHls = url.toLowerCase().includes('.m3u8');
+
+    if (isHls && window.Hls && Hls.isSupported()) {
+      hls = new Hls();
+      hls.loadSource(url);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_LOADED, (e, data) => {
+        const levels = data.levels || [];
+        quality.innerHTML = '<option value="-1">AUTO</option>';
+        if (levels.length) {
+          levels.forEach((lvl, index) => {
+            const opt = document.createElement('option');
+            const h = lvl.height || 0;
+            const b = lvl.bitrate || 0;
+            const label = h ? `${h}p (${Math.round(b/1000)} kbps)` : `${Math.round(b/1000)} kbps`;
+            opt.value = index.toString();
+            opt.textContent = label;
+            quality.appendChild(opt);
+          });
+          quality.disabled = false;
+          qInfo.textContent = 'Quality: auto';
+        }
+      });
+
+      hls.on(Hls.Events.LEVEL_SWITCHED, (e, data) => {
+        if (!hls.levels) return;
+        const lvl = hls.levels[data.level];
+        if (!lvl) return;
+        const h = lvl.height || 0;
+        const b = lvl.bitrate || 0;
+        const label = h ? `${h}p` : `${Math.round(b/1000)} kbps`;
+        if (hls.autoLevelEnabled) {
+          qInfo.textContent = `Quality: auto (${label})`;
+        } else {
+          qInfo.textContent = `Quality: ${label}`;
+        }
+      });
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        attachSubs(subUrl, subLabel);
+        video.play().catch(()=>{});
+        titleEl.textContent = '';
+        showUI();
+      });
+
+    } else {
+      video.src = url;
+      attachSubs(subUrl, subLabel);
+      video.play().catch(()=>{});
+      titleEl.textContent = '';
+      showUI();
+    }
+  }
+
+  // Time updates
+  video.addEventListener('timeupdate', () => {
+    if (!video.duration || isNaN(video.duration)) return;
+    seek.value = (video.currentTime / video.duration) * 100;
+    curTimeEl.textContent = fmt(video.currentTime);
+    durTimeEl.textContent = fmt(video.duration);
+  });
+
+  video.addEventListener('play', () => {
+    btnPlay.textContent = '⏸';
+  });
+
+  video.addEventListener('pause', () => {
+    btnPlay.textContent = '▶';
+  });
+
+  // Button handlers
+  btnPlay.onclick = () => {
+    video.paused ? video.play() : video.pause();
+    showUI();
+  };
+
+  btnBack.onclick = () => {
+    video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+    showUI();
+  };
+
+  btnFwd.onclick = () => {
+    if (!isNaN(video.duration)) {
+      video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
+    }
+    showUI();
+  };
+
+  btnRestart.onclick = () => {
+    if (!isNaN(video.duration)) {
+      video.currentTime = 0;
+      video.play().catch(()=>{});
+      showUI();
+    }
+  };
+
+  btnMute.onclick = () => {
+    video.muted = !video.muted;
+    btnMute.textContent = video.muted ? '🔇' : '🔊';
+    showUI();
+  };
+
+  btnSubs.onclick = () => {
+    toggleSubs();
+    showUI();
+  };
+
+  quality.addEventListener('change', () => {
+    if (!hls) return;
+    const v = quality.value;
+    if (v === '-1') {
+      hls.currentLevel = -1;
+      hls.autoLevelEnabled = true;
+      qInfo.textContent = 'Quality: auto';
+    } else {
+      const i = parseInt(v, 10);
+      if (!isNaN(i)) {
+        hls.autoLevelEnabled = false;
+        hls.currentLevel = i;
+        const lvl = hls.levels && hls.levels[i];
+        if (lvl) {
+          const h = lvl.height || 0;
+          const b = lvl.bitrate || 0;
+          qInfo.textContent = `Quality: ${h ? h + 'p' : Math.round(b/1000) + ' kbps'}`;
+        }
+      }
+    }
+    showUI();
+  });
+
+  // Seekbar drag
+  seek.addEventListener('input', () => {
+    if (!video.duration || isNaN(video.duration)) return;
+    const pos = seek.value / 100;
+    video.currentTime = pos * video.duration;
+    showUI();
+  });
+
+  // Preview bubble
+  seekWrap.addEventListener('mousemove', (e) => {
+    if (!video.duration || isNaN(video.duration)) return;
+    const rect = seekWrap.getBoundingClientRect();
+    let pos = (e.clientX - rect.left) / rect.width;
+    pos = Math.max(0, Math.min(1, pos));
+    const t = pos * video.duration;
+    preview.textContent = fmt(t);
+    preview.style.left = `${pos * 100}%`;
+    preview.classList.add('visible');
+  });
+
+  seekWrap.addEventListener('mouseleave', () => {
+    preview.classList.remove('visible');
+  });
+
+  // Mouse movement shows UI (browser / debug)
+  document.addEventListener('mousemove', () => {
+    showUI();
+  });
+
+  // ====== HANDLING MESSAGES FROM receiver.html ======
+  window.addEventListener('message', (event) => {
+    const data = event.data || {};
+
+    if (data.type === 'LOAD_STREAM') {
+      const url = data.url || '';
+      const subUrl = data.subUrl || '';
+      const subLabel = data.subLabel || 'Subtitles';
+      loadStream(url, subUrl, subLabel);
+      return;
+    }
+
+    if (data.type === 'REMOTE_KEY') {
+      const k = data.key;
+      showUI();
+
+      switch (k) {
+        case 'MediaPlayPause':
+        case ' ':
+        case 'Enter':
+          if (focusIndex >= 0 && focusIndex < focusables.length) {
+            const el = focusables[focusIndex];
+            if (el && typeof el.click === 'function') el.click();
+          } else {
+            video.paused ? video.play() : video.pause();
+          }
+          break;
+
+        case 'ArrowLeft':
+          // First time: move focus to first button
+          if (focusIndex === -1) {
+            moveFocus(0);
+          } else {
+            moveFocus(-1);
+          }
+          break;
+
+        case 'ArrowRight':
+          if (focusIndex === -1) {
+            moveFocus(0);
+          } else {
+            moveFocus(1);
+          }
+          break;
+
+        case 'ArrowUp':
+          // volume up
+          video.volume = Math.min(1, (video.volume || 0) + 0.05);
+          break;
+
+        case 'ArrowDown':
+          // volume down
+          video.volume = Math.max(0, (video.volume || 0) - 0.05);
+          break;
+      }
+    }
+  });
+
+  // Optional keyboard control in browser (for debug)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === ' ' || e.key === 'MediaPlayPause') {
+      e.preventDefault();
+      video.paused ? video.play() : video.pause();
+      showUI();
+    }
+  });
 </script>
 
 </body>
