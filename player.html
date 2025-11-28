@@ -7,131 +7,109 @@
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 
 <style>
-html, body {
-  margin: 0; width: 100%; height: 100%;
-  background: #020817;
-  font-family: system-ui, Arial, sans-serif;
-  overflow: hidden;
+html,body{
+  margin:0;width:100%;height:100%;
+  background:#020817;
+  font-family:system-ui,Arial,sans-serif;
+  overflow:hidden;
 }
-
-video {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  background: radial-gradient(circle at center, #0b1430 0, #020817 55%, #000 100%);
+video{
+  width:100%;height:100%;object-fit:contain;
+  background:radial-gradient(circle,#0b1430,#020817 60%,#000);
 }
 
 /* Overlay */
-.overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, rgba(2,8,23,0.97), transparent);
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  padding: 24px;
-  opacity: 0;
-  pointer-events: none;
-  transition: .25s ease;
+.overlay{
+  position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(2,8,23,.98),transparent);
+  display:flex;flex-direction:column;justify-content:flex-end;
+  padding:24px;
+  opacity:0;pointer-events:none;
+  transition:.25s ease;
 }
-.overlay.show {
-  opacity: 1;
-  pointer-events: auto;
+.overlay.show{opacity:1;pointer-events:auto}
+
+/* Seek UI */
+.seek-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.time{color:#fff;font-size:12px;min-width:60px;text-align:center}
+.bar{
+  flex:1;height:6px;border-radius:999px;
+  background:#334155;position:relative;overflow:hidden
+}
+.fill{
+  height:100%;width:0%;
+  background:linear-gradient(90deg,#facc15,#f59e0b);
+  box-shadow:0 0 14px rgba(250,204,21,.7)
 }
 
-/* Time + bar */
-.row {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 14px;
+/* Thumbnail preview */
+.thumb-preview{
+  position:absolute;
+  bottom:42px;
+  transform:translateX(-50%);
+  background:#000;
+  border-radius:8px;
+  overflow:hidden;
+  display:none;
+  border:2px solid #facc15;
 }
-.time {
-  color: #e5e7eb;
-  min-width: 64px;
-  text-align: center;
-  font-size: 13px;
+.thumb-preview img{
+  display:block;
+  width:160px;height:90px;
+  object-fit:cover;
 }
-.bar {
-  flex: 1;
-  height: 5px;
-  background: rgba(148,163,184,.3);
-  border-radius: 999px;
-  overflow: hidden;
-}
-.bar-fill {
-  height: 100%;
-  width: 0%;
-  background: #facc15;
-  box-shadow: 0 0 12px rgba(250,204,21,.6);
+.thumb-time{
+  text-align:center;
+  color:#fff;background:#000c;font-size:12px;padding:2px 4px;
 }
 
 /* Controls */
-.controls {
-  display: flex;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
+.controls{
+  display:flex;justify-content:space-between;
+  gap:12px;flex-wrap:wrap
+}
+.left,.right{display:flex;gap:10px}
+
+/* Buttons */
+.btn{
+  background:radial-gradient(circle at top left,#facc15,#f59e0b,#b45309);
+  color:#020617;border-radius:999px;
+  border:1px solid #fde047;
+  padding:10px 18px;font-size:14px;font-weight:700;
+  box-shadow:0 12px 28px rgba(0,0,0,.85),0 0 14px rgba(250,204,21,.45);
+  transition:transform .15s, box-shadow .2s;
+}
+.right .btn{
+  background:radial-gradient(circle at top,#1d4ed8,#020617);
+  color:#e5e7eb;border-color:rgba(191,219,254,.5)
 }
 
-.left, .right {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.btn {
-  background: radial-gradient(circle at top left, #facc15, #f59e0b, #b45309);
-  color: #020617;
-  border: 1px solid #fde047;
-  border-radius: 999px;
-  padding: 10px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 10px 24px rgba(0,0,0,.8), 0 0 10px rgba(250,204,21,.4);
-  transition: transform .15s, box-shadow .2s;
-}
-
-.right .btn {
-  background: radial-gradient(circle at top, #1d4ed8, #020617);
-  color: #e5e7eb;
-  border-color: rgba(191,219,254,.4);
-  box-shadow: 0 10px 24px rgba(0,0,0,.8), 0 0 10px rgba(59,130,246,.5);
-}
-
-.btn:active { transform: scale(.97); }
-
-.focus {
+/* Focus */
+.focus{
+  transform:scale(1.12);
   box-shadow:
-    0 0 0 2px #facc15,
-    0 0 0 4px #1e40af,
-    0 14px 40px rgba(0,0,0,.9);
+    0 0 0 3px #facc15,
+    0 0 0 6px rgba(30,64,175,.85),
+    0 16px 40px rgba(0,0,0,.95);
 }
 
 /* Quality menu */
-.menu {
-  position: absolute;
-  right: 26px;
-  bottom: 170px;
-  background: rgba(2,6,23,.97);
-  border: 1px solid rgba(148,163,184,.4);
-  border-radius: 14px;
-  padding: 10px;
-  display: none;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 200px;
+.menu{
+  position:absolute;right:24px;bottom:170px;
+  background:#020617f0;border-radius:14px;
+  padding:10px;display:none;flex-direction:column;gap:6px;
+  border:1px solid #334155;
 }
-.menu-item {
-  padding: 6px 10px;
-  border-radius: 8px;
-  font-size: 13px;
-  color: #e5e7eb;
+.menu-item{
+  padding:6px 12px;border-radius:8px;
+  font-size:13px;color:#e5e7eb
 }
-.menu-item.active {
-  background: linear-gradient(90deg, #facc15, #f97316);
-  color: #020617;
+.menu-item.active{
+  background:linear-gradient(90deg,#facc15,#f59e0b);
+  color:#020617;font-weight:700
+}
+.menu-item.selected{
+  outline:2px solid #60a5fa;
 }
 </style>
 </head>
@@ -140,9 +118,16 @@ video {
 <video id="video" crossorigin="anonymous"></video>
 
 <div id="overlay" class="overlay">
-  <div class="row">
+  <div class="seek-row" id="seekRow">
     <div id="cur" class="time">0:00</div>
-    <div class="bar"><div id="fill" class="bar-fill"></div></div>
+    <div id="bar" class="bar">
+      <div id="fill" class="fill"></div>
+
+      <div id="thumb" class="thumb-preview">
+        <img id="thumbImg" src="" />
+        <div id="thumbTime" class="thumb-time">0:00</div>
+      </div>
+    </div>
     <div id="dur" class="time">0:00</div>
   </div>
 
@@ -151,7 +136,7 @@ video {
       <button id="bBack" class="btn">⏪ 10s</button>
       <button id="bPlay" class="btn">⏸</button>
       <button id="bFwd" class="btn">10s ⏩</button>
-      <button id="bRestart" class="btn">⟲ Restart</button>
+      <button id="bRestart" class="btn">⟲</button>
     </div>
     <div class="right">
       <button id="bSubs" class="btn">Subs: On</button>
@@ -169,6 +154,11 @@ const overlay = document.getElementById('overlay');
 const curEl = document.getElementById('cur');
 const durEl = document.getElementById('dur');
 const fill = document.getElementById('fill');
+const bar = document.getElementById('bar');
+
+const thumb = document.getElementById('thumb');
+const thumbImg = document.getElementById('thumbImg');
+const thumbTime = document.getElementById('thumbTime');
 
 const bBack = document.getElementById('bBack');
 const bPlay = document.getElementById('bPlay');
@@ -177,170 +167,141 @@ const bRestart = document.getElementById('bRestart');
 const bSubs = document.getElementById('bSubs');
 const bQuality = document.getElementById('bQuality');
 const bMute = document.getElementById('bMute');
+
 const qMenu = document.getElementById('qMenu');
 
-let hls = null;
-let subsOn = true;
-let qItems = [];
-let qIndex = 0;
-let qOpen = false;
+let hls=null,hideT;
+let qItems=[],qIndex=0,qOpen=false;
+let focusables=[bBack,bPlay,bFwd,bRestart,bSubs,bQuality,bMute];
+let fIndex=-1;
 
-let fIndex = -1;
-const focusables = [bBack,bPlay,bFwd,bRestart,bSubs,bQuality,bMute];
+let seekMode=false;
+let virtualSeek=0;
 
-let hideT;
-
-// helper
-const fmt = t => {
-  if (!t || isNaN(t)) return "0:00";
-  const m = Math.floor(t / 60);
-  const s = Math.floor(t % 60).toString().padStart(2,"0");
+/* helpers */
+const fmt=t=>{
+  if(!t||isNaN(t))return"0:00";
+  const m=Math.floor(t/60);
+  const s=Math.floor(t%60).toString().padStart(2,"0");
   return `${m}:${s}`;
 };
 
 function showUI(){
   overlay.classList.add("show");
   clearTimeout(hideT);
-  hideT = setTimeout(()=>{
-    overlay.classList.remove("show");
-    clearFocus();
-  },4000);
+  hideT=setTimeout(()=>{overlay.classList.remove("show");clearFocus();seekMode=false;thumb.style.display="none"},5000);
 }
 
 function clearFocus(){
-  focusables.forEach(b=>b.classList.remove("focus"));
-  fIndex = -1;
+  focusables.forEach(b=>b.classList.remove("focus"));fIndex=-1;
 }
-
 function moveFocus(d){
-  if (fIndex === -1) fIndex = 0;
-  else fIndex = (fIndex + d + focusables.length) % focusables.length;
+  if(fIndex==-1)fIndex=0;
+  else fIndex=(fIndex+d+focusables.length)%focusables.length;
   focusables.forEach(b=>b.classList.remove("focus"));
   focusables[fIndex].classList.add("focus");
 }
 
-function reset(){
-  if (hls){hls.destroy(); hls=null;}
-  video.pause();
-  video.removeAttribute("src");
-  video.load();
-  video.querySelectorAll("track").forEach(t=>t.remove());
-  qMenu.innerHTML = "";
-  qOpen = false;
+/* Quality highlight */
+function highlightQ(){
+  [...qMenu.children].forEach((el,i)=>{
+    el.classList.toggle("active",i===qIndex);
+  });
 }
 
-function attachSubs(url){
-  if (!url || !url.endsWith(".vtt")) return;
-  const t = document.createElement("track");
-  t.kind = "subtitles";
-  t.src = url;
-  t.default = true;
-  video.appendChild(t);
+/* Fake thumbnails (placeholder) */
+function updateThumb(pos){
+  const rect=bar.getBoundingClientRect();
+  const pct=pos/video.duration;
+  const x=pct*rect.width;
+  thumb.style.left=x+"px";
+  thumb.style.display="block";
+  thumbTime.textContent=fmt(pos);
+
+  // placeholder thumb
+  thumbImg.src="https://dummyimage.com/320x180/000/fff&text="+fmt(pos);
 }
 
-function loadStream(url, subUrl){
-  reset();
-  if (!url) return;
-
-  if (url.includes(".m3u8") && Hls.isSupported()){
-    hls = new Hls();
-    hls.loadSource(url);
-    hls.attachMedia(video);
-
-    hls.on(Hls.Events.MANIFEST_LOADED,(e,d)=>{
-      qItems=[]; qMenu.innerHTML="";
-      qItems.push({label:"AUTO", level:-1});
-      d.levels.forEach((lvl,i)=>{
-        const h=lvl.height||0,b=lvl.bitrate||0;
-        qItems.push({label:`${h}p (${Math.round(b/1000)}kb)`,level:i});
-      });
-
-      qItems.forEach(q=>{
-        const div=document.createElement("div");
-        div.className="menu-item";
-        div.textContent=q.label;
-        qMenu.appendChild(div);
-      });
-    });
-
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{
-      attachSubs(subUrl);
-      video.play();
-      showUI();
-    });
-  } else {
-    video.src=url;
-    attachSubs(subUrl);
+/* Stream load */
+window.addEventListener("message",e=>{
+  const d=e.data||{};
+  if(d.type==="LOAD_STREAM"){
+    video.src=d.url;
     video.play();
     showUI();
   }
-}
 
-// UI
-video.addEventListener("timeupdate",()=>{
-  if (!video.duration) return;
-  curEl.textContent = fmt(video.currentTime);
-  durEl.textContent = fmt(video.duration);
-  fill.style.width = (video.currentTime/video.duration*100)+"%";
-});
-
-bPlay.onclick = ()=>{ video.paused?video.play():video.pause(); };
-bBack.onclick = ()=>{ video.currentTime=Math.max(0,video.currentTime-10); };
-bFwd.onclick = ()=>{ video.currentTime+=10; };
-bRestart.onclick = ()=>{ video.currentTime=0; video.play(); };
-bMute.onclick = ()=>{ video.muted=!video.muted; bMute.textContent=video.muted?"🔇":"🔊"; };
-bSubs.onclick=()=>{
-  subsOn=!subsOn;
-  Array.from(video.textTracks).forEach(t=>t.mode=subsOn?"showing":"disabled");
-  bSubs.textContent=subsOn?"Subs: On":"Subs: Off";
-};
-bQuality.onclick=()=>{
-  qOpen=!qOpen;
-  qMenu.style.display=qOpen?"flex":"none";
-  qIndex=0;
-};
-
-// REMOTE HANDLING
-window.addEventListener("message",e=>{
-  const d=e.data||{};
-  if (d.type==="LOAD_STREAM") loadStream(d.url,d.subUrl);
-
-  if (d.type==="REMOTE_KEY"){
+  if(d.type==="REMOTE_KEY"){
     showUI();
-    switch(d.key){
-      case "ArrowLeft": moveFocus(-1); break;
-      case "ArrowRight": moveFocus(1); break;
 
+    switch(d.key){
+
+      /* navigation */
+      case "ArrowLeft":
+        if(seekMode){
+          virtualSeek=Math.max(0,virtualSeek-10);
+          updateThumb(virtualSeek);
+        }else moveFocus(-1);
+      break;
+
+      case "ArrowRight":
+        if(seekMode){
+          virtualSeek=Math.min(video.duration,virtualSeek+10);
+          updateThumb(virtualSeek);
+        }else moveFocus(1);
+      break;
+
+      case "ArrowUp":
+        seekMode=true;
+        virtualSeek=video.currentTime;
+        updateThumb(virtualSeek);
+      break;
+
+      case "ArrowDown":
+        seekMode=false;
+        thumb.style.display="none";
+      break;
+
+      /* R1 / L1 skip */
       case "MediaNextTrack":
-      case "MediaTrackNext":
       case "ChannelUp":
-        video.currentTime += 10;
-        break;
+        video.currentTime+=10;
+      break;
 
       case "MediaPreviousTrack":
-      case "MediaTrackPrevious":
       case "ChannelDown":
-        video.currentTime = Math.max(0, video.currentTime - 10);
-        break;
+        video.currentTime=Math.max(0,video.currentTime-10);
+      break;
 
       case "Enter":
-        if(qOpen){
-          const q=qItems[qIndex];
-          if(hls && q){
-            if(q.level===-1){hls.currentLevel=-1;hls.autoLevelEnabled=true;}
-            else{hls.autoLevelEnabled=false;hls.currentLevel=q.level;}
-          }
-          qOpen=false;
-          qMenu.style.display="none";
-        } else if(fIndex>=0){
+        if(seekMode){
+          video.currentTime=virtualSeek;
+          seekMode=false;
+          thumb.style.display="none";
+        }else if(fIndex>=0){
           focusables[fIndex].click();
-        } else {
+        }else{
           video.paused?video.play():video.pause();
         }
-        break;
+      break;
     }
   }
 });
+
+/* Time updates */
+video.addEventListener("timeupdate",()=>{
+  if(!video.duration) return;
+  curEl.textContent=fmt(video.currentTime);
+  durEl.textContent=fmt(video.duration);
+  fill.style.width=(video.currentTime/video.duration*100)+"%";
+});
+
+/* UI buttons */
+bPlay.onclick=()=>video.paused?video.play():video.pause();
+bBack.onclick=()=>video.currentTime=Math.max(0,video.currentTime-10);
+bFwd.onclick=()=>video.currentTime+=10;
+bRestart.onclick=()=>{video.currentTime=0;video.play()};
+bMute.onclick=()=>{video.muted=!video.muted;bMute.textContent=video.muted?"🔇":"🔊"};
 </script>
 </body>
 </html>
