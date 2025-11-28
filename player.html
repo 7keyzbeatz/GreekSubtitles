@@ -15,10 +15,13 @@ html,body{
   background:#000;overflow:hidden;
   font-family:system-ui,-apple-system,Segoe UI,Roboto;
 }
+
 video{
   width:100%;height:100%;
   object-fit:contain;background:#000;
 }
+
+/* HUD CENTERED */
 .hud{
   position:absolute;
   left:50%;
@@ -29,7 +32,12 @@ video{
   pointer-events:none;
   transition:opacity .25s ease;
 }
-.hud.show{opacity:1;}
+
+.hud.show{
+  opacity:1;
+  pointer-events:auto;
+}
+
 .time-row{
   display:flex;
   justify-content:space-between;
@@ -37,6 +45,7 @@ video{
   font-size:14px;
   margin-bottom:6px;
 }
+
 .bar{
   position:relative;
   height:6px;
@@ -44,6 +53,7 @@ video{
   border-radius:999px;
   overflow:hidden;
 }
+
 .fill{
   position:absolute;
   top:0;left:0;height:100%;
@@ -52,20 +62,24 @@ video{
   box-shadow:0 0 12px rgba(255,214,0,.7);
   transition:width .08s linear;
 }
-.log{
+
+/* preview bubble (ώρα μόνο, μπορείς να βάλεις thumbnails μετά) */
+.preview{
   position:absolute;
-  bottom:0;
-  width:100%;
-  max-height:35%;
-  overflow:auto;
-  background:rgba(0,0,0,.7);
-  color:#0f0;
-  font-size:11px;
-  padding:4px;
+  bottom:18px;
+  transform:translateX(-50%);
+  background:rgba(0,0,0,.85);
+  color:white;
+  padding:4px 8px;
+  border-radius:8px;
+  font-size:12px;
+  opacity:0;
+  pointer-events:none;
+  transition:.15s;
 }
+.preview.show{opacity:1;}
 </style>
 </head>
-
 <body>
 
 <video id="video" crossorigin="anonymous"></video>
@@ -75,10 +89,11 @@ video{
     <div id="cur">0:00</div>
     <div id="dur">0:00</div>
   </div>
-  <div class="bar"><div id="fill" class="fill"></div></div>
+  <div class="bar" id="bar">
+    <div id="fill" class="fill"></div>
+    <div id="preview" class="preview">0:00</div>
+  </div>
 </div>
-
-<div id="logs" class="log"></div>
 
 <script>
 const v = document.getElementById("video");
@@ -86,23 +101,12 @@ const hud = document.getElementById("hud");
 const fill = document.getElementById("fill");
 const cur = document.getElementById("cur");
 const dur = document.getElementById("dur");
-const logs = document.getElementById("logs");
+const bar = document.getElementById("bar");
+const preview = document.getElementById("preview");
 
 let hls = null;
 let dash = null;
-let customHeaders = {};
-let fatalCount = 0;
-let lastTime = 0;
-let currentUrl = "";
-let currentSub = "";
-
-function log(t){
-  const l = document.createElement("div");
-  l.textContent = "["+new Date().toLocaleTimeString()+"] "+t;
-  logs.appendChild(l);
-  logs.scrollTop = logs.scrollHeight;
-  console.log(t);
-}
+let hudTimer = null;
 
 function fmt(t){
   if(!isFinite(t)) return "0:00";
@@ -117,15 +121,17 @@ function fmt(t){
 
 function showHud(){
   hud.classList.add("show");
-  setTimeout(()=>hud.classList.remove("show"),3000);
+  clearTimeout(hudTimer);
+  hudTimer = setTimeout(()=>hud.classList.remove("show"), 3000);
 }
 
 function reset(){
   if(hls){hls.destroy();hls=null;}
   if(dash){dash.reset();dash=null;}
-  v.pause(); v.src=""; v.load();
-  [...v.querySelectorAll("track")].forEach(t=>t.remove());
-  fatalCount=0;
+  v.pause();
+  v.removeAttribute("src");
+  v.load();
+  v.querySelectorAll("track").forEach(t=>t.remove());
 }
 
 function addSubs(url){
@@ -136,111 +142,158 @@ function addSubs(url){
   t.default=true;
   t.srclang="en";
   v.appendChild(t);
+
   v.addEventListener("loadedmetadata",()=>{
-    [...v.textTracks].forEach(tt=>tt.mode="showing");
+    for(let i=0;i<v.textTracks.length;i++){
+      v.textTracks[i].mode="showing";
+    }
   },{once:true});
 }
 
-function loadStream(url, subUrl, headers = {}){
+function loadStream(url, subUrl){
+  if(!url) return;
   reset();
-  currentUrl=url;
-  currentSub=subUrl;
-  customHeaders=headers;
+  const low = url.toLowerCase();
 
-  log("Loading: "+url);
-
-  if(url.toLowerCase().includes(".m3u8") && Hls.isSupported()){
-    hls = new Hls({
-      xhrSetup: function(xhr){
-        for(const k in customHeaders){
-          xhr.setRequestHeader(k, customHeaders[k]);
-        }
-      }
-    });
-
-    hls.on(Hls.Events.ERROR,(e,d)=>{
-      log("HLS ERROR: "+d.type+" fatal="+d.fatal);
-      if(d.fatal){
-        fatalCount++;
-        if(fatalCount>=3) skipAhead();
-        else try{hls.recoverMediaError()}catch(_){}
-      }
-    });
-
-    hls.attachMedia(v);
+  if(low.endsWith(".m3u8") && window.Hls && Hls.isSupported()){
+    hls = new Hls();
     hls.loadSource(url);
-
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{
-      log("Manifest OK");
+    hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
       addSubs(subUrl);
       v.play().catch(()=>{});
       showHud();
     });
   }
-  else if(url.toLowerCase().includes(".mpd")){
+  else if(low.endsWith(".mpd") && window.dashjs){
     dash = dashjs.MediaPlayer().create();
-    dash.initialize(v,url,true);
+    dash.initialize(v, url, true);
     addSubs(subUrl);
     showHud();
   }
-  else{
-    v.src=url;
+  else {
+    v.src = url;
     addSubs(subUrl);
     v.play().catch(()=>{});
     showHud();
   }
 }
 
-function skipAhead(){
-  fatalCount=0;
-  const target=(v.currentTime||lastTime)+30;
-  log("SKIP +30s → "+target.toFixed(1));
-  try{v.currentTime=target;}catch{}
-}
-
+/* time update */
 v.addEventListener("timeupdate",()=>{
   if(!isFinite(v.duration)) return;
-  fill.style.width=((v.currentTime/v.duration)*100)+"%";
-  cur.textContent=fmt(v.currentTime);
-  dur.textContent=fmt(v.duration);
-  lastTime=v.currentTime;
+  const p = (v.currentTime/v.duration)*100;
+  fill.style.width = p+"%";
+  cur.textContent = fmt(v.currentTime);
+  dur.textContent = fmt(v.duration);
 });
 
-setInterval(()=>{
-  if(!v.src||!v.duration) return;
-  if(!v.paused && Math.abs(v.currentTime-lastTime)<0.05){
-    log("Freeze → reload");
-    const src=v.currentSrc||currentUrl;
-    const t=v.currentTime;
-    v.src=src; v.load();
-    v.onloadedmetadata=()=>{
-      v.currentTime=t;
-      v.play().catch(()=>{});
-    };
-  }
-  lastTime=v.currentTime;
-},4000);
+/* Seeking */
+function seek(delta){
+  if(!isFinite(v.duration)) return;
+  let t = v.currentTime + delta;
+  if(t<0) t=0;
+  if(t>v.duration) t=v.duration;
+  v.currentTime = t;
 
-// Remote
-function remote(key){
+  const p = (t/v.duration);
+  preview.style.left = (p*100)+"%";
+  preview.textContent = fmt(t);
+  preview.classList.add("show");
   showHud();
-  if(key==="ArrowLeft")  v.currentTime-=10;
-  if(key==="ArrowRight") v.currentTime+=10;
-  if(key==="Enter"||key==="MediaPlayPause") v.paused?v.play():v.pause();
 }
 
-window.addEventListener("message",(e)=>{
-  const d=e.data||{};
+function togglePlay(){
+  v.paused ? v.play().catch(()=>{}) : v.pause();
+  showHud();
+}
+
+function stopVideo(){
+  v.pause();
+  v.currentTime=0;
+  fill.style.width="0%";
+  cur.textContent="0:00";
+  showHud();
+}
+
+/* Remote input */
+function remote(key){
+  showHud();
+
+  switch(key){
+
+    case "ArrowLeft":
+    case "MediaPreviousTrack":
+    case "MediaTrackPrevious":
+    case "ChannelDown":
+      seek(-10);
+      break;
+
+    case "ArrowRight":
+    case "MediaNextTrack":
+    case "MediaTrackNext":
+    case "ChannelUp":
+      seek(10);
+      break;
+
+    case "Enter":
+    case "MediaPlayPause":
+    case " ":
+      togglePlay();
+      break;
+
+    case "MediaStop":
+      stopVideo();
+      break;
+  }
+}
+
+/* Messages from receiver */
+window.addEventListener("message",e=>{
+  const d = e.data || {};
   if(d.type==="LOAD_STREAM"){
-    loadStream(d.url,d.subUrl,d.headers||{});
+    loadStream(d.url, d.subUrl);
   }
   if(d.type==="REMOTE_KEY"){
     remote(d.key);
   }
 });
+  
+/* debug with keyboard in browser */
+document.addEventListener("keydown",e=>remote(e.key));
 
-document.addEventListener("keydown",(e)=>remote(e.key));
+// 1. Πες στον Chromecast ότι υπάρχει πάντα "κάτι" ενεργό
+setInterval(()=>{
+  try{
+    if(v && v.src){
+      // fake activity ping
+      v.play().catch(()=>{});
+    }
+  }catch(e){}
+}, 5000);
+
+// 2. Αν παγώσει τελείως το video, ξαναφόρτωσέ το
+let lastTime = 0;
+setInterval(()=>{
+  if(!v || !v.src || !v.duration) return;
+
+  if(!v.paused && v.currentTime === lastTime){
+    console.log("⚠️ Freeze detected — soft reload");
+    const src = v.currentSrc || v.src;
+    const t = v.currentTime;
+
+    v.src = src;
+    v.load();
+
+    v.onloadedmetadata = ()=>{
+      v.currentTime = t;
+      v.play().catch(()=>{});
+    };
+  }
+
+  lastTime = v.currentTime;
+},3000);
+  
 </script>
-
 </body>
 </html>
