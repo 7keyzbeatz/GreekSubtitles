@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Cast Debug Receiver - Data Viewer</title>
+    <title>Cast Debug Receiver - Data Viewer (No Subs Test)</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     
     <script src="//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
@@ -33,8 +33,8 @@
             box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
             width: 90%;
             max-width: 800px;
-            white-space: pre-wrap; /* Διατηρεί τις αλλαγές γραμμής */
-            word-wrap: break-word; /* Επιτρέπει το σπάσιμο μεγάλων URLs */
+            white-space: pre-wrap; 
+            word-wrap: break-word; 
             font-size: 16px;
             line-height: 1.5;
         }
@@ -68,7 +68,6 @@
             entry.innerHTML = `<span class="label">${key}:</span> ${value}`;
             if (isError) {
                 entry.querySelector('.label').classList.add('error');
-                entry.querySelector('span:last-child').classList.add('error');
             }
             dataViewer.appendChild(entry);
         }
@@ -82,7 +81,6 @@
             const context = cast.receiver.CastReceiverContext.getInstance();
             const playerManager = context.getPlayerManager();
             
-            // Καθαρίζουμε το αρχικό μήνυμα
             dataViewer.innerHTML = '';
             displayData("STATUS", "SDK Initialized. Ready to receive.", false);
 
@@ -94,19 +92,25 @@
                 displayData("TIMESTAMP", new Date().toLocaleString());
                 
                 const media = loadRequest.media;
+                
+                // FIX: Χειριζόμαστε την περίπτωση που το media object είναι κενό/null
                 const videoUrl = media ? media.contentId : 'N/A (Media object missing)';
                 const tracks = media && media.mediaTracks ? media.mediaTracks : [];
+                
                 
                 // --- 1. Εμφάνιση Video URL ---
                 displayData("VIDEO URL (contentId)", videoUrl || 'NULL / EMPTY');
 
-                // --- 2. Εμφάνιση Υποτίτλων (Media Tracks) ---
+                // --- 2. Εμφάνιση Content Type ---
+                displayData("CONTENT TYPE", media ? media.contentType : 'N/A');
+
+                // --- 3. Εμφάνιση Υποτίτλων (Media Tracks) ---
                 if (tracks.length > 0) {
                     displayData("SUBTITLE TRACKS FOUND", tracks.length);
                     
                     tracks.forEach((track, index) => {
                         if (track.type === cast.framework.messages.MediaTrack.Type.TEXT) {
-                            const subUrl = track.trackContentId || 'URL MISSING';
+                            const subUrl = track.trackContentId || 'URL MISSING (ERROR)';
                             const subLabel = track.name || track.language || 'Label MISSING';
                             
                             displayData(`  - Track ${index + 1} (TEXT)`, `Label: ${subLabel}, URL: ${subUrl}`);
@@ -118,20 +122,10 @@
                     });
 
                 } else {
-                    displayData("SUBTITLE TRACKS FOUND", "0 (No subtitles sent)");
-                }
-                
-                // --- 3. Εμφάνιση Custom Data (αν υπάρχουν) ---
-                const customData = loadRequest.customData;
-                if (customData) {
-                    displayData("CUSTOM DATA (JSON)", JSON.stringify(customData, null, 2));
-                } else {
-                    displayData("CUSTOM DATA", "None");
+                    displayData("SUBTITLE TRACKS FOUND", "0 (Correct for no subs scenario)");
                 }
 
-
-                // Επειδή είναι debug receiver, επιστρέφουμε το αίτημα αυτούσιο
-                // ώστε το Cast SDK να αναγνωρίσει την επιτυχημένη λήψη του.
+                // Επιστρέφουμε το αίτημα αυτούσιο
                 return loadRequest;
             });
 
