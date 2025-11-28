@@ -21,18 +21,20 @@
       --text-muted: #a4a9c5;
       --radius-lg: 18px;
     }
+
     * { box-sizing: border-box; }
     /* Fullscreen setup */
     html, body {
       margin: 0; padding: 0; width: 100%; height: 100%; background: #000; font-family: system-ui; color: var(--text-main); overflow: hidden; display: flex; align-items: center; justify-content: center;
     }
     .shell { width: 100%; height: 100%; padding: 0; display: flex; align-items: center; justify-content: center; }
-    .main { flex: 1; width: 100%; height: 100%; position: relative; background: #000000; }
+    .header, .panel, .log { display: none !important; } 
+    .main { flex: 1; width: 100%; height: 100%; position: relative; background: #000000; box-shadow: none; border: none; }
     .video-wrapper { position: relative; width: 100%; height: 100%; background: #000; }
     video { width: 100%; height: 100%; background: #000; outline: none; }
-    /* FIX: Κρύβουμε το dummy element που χρησιμοποιεί το Cast SDK */
-    #cast-player-player { display: none !important; }
-    /* Controls styles (διατηρούνται) */
+    #cast-player-player { display: none !important; } /* FIX */
+
+    /* Controls styles */
     .pro-controls { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: flex-end; padding: 16px; background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%); pointer-events: none; opacity: 0; transition: opacity .25s ease; z-index: 30; }
     .video-wrapper:hover .pro-controls, .controls-visible .pro-controls { opacity: 1; pointer-events: auto; }
     .loading-indicator { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 24px; color: var(--accent); background: rgba(0,0,0,0.7); padding: 15px 25px; border-radius: var(--radius-lg); display: none; z-index: 40; }
@@ -43,8 +45,7 @@
     .pro-btn { background: rgba(0,0,0,.65); border: none; color: white; padding: 10px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; transition: .15s ease; min-width: 44px; min-height: 36px; outline: none; }
     .pro-btn.focus-ring, .pro-select.focus-ring { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent); }
     .pro-select { background: rgba(0,0,0,.65); border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); padding: 8px 10px; color: #fff; font-size: 12px; outline: none; min-width: 88px; appearance: menulist-button; }
-    /* Log viewer for debugging (κρυφό) */
-    #logViewer { display: none; }
+    .pro-time-label { font-size: 12px; color: var(--text-muted); min-width: 110px; text-align: center; }
   </style>
 </head>
 <body>
@@ -75,12 +76,13 @@
                 <div class="pro-time-label" id="timeLabel">00:00 / 00:00</div>
                 <select class="pro-select" id="qualitySelect" disabled tabindex="5"><option value="-1">Auto</option></select>
                 <button class="pro-btn" id="muteBtn" tabindex="6">🔊</button>
+                <button class="pro-btn" id="fsBtn" tabindex="7">⛶</button>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="overlay-info"><span id="info-res">Resolution: -</span><span class="chip" id="info-tech">CAF</span></div>
+        <div class="overlay-info"><span id="info-res">Resolution: auto</span><span class="chip" id="info-tech">CAF</span></div>
       </div>
     </div>
   </div>
@@ -88,125 +90,190 @@
   <script>
     const video = document.getElementById('video');
     const loadingIndicator = document.getElementById('loadingIndicator');
-    const statusLabel = document.getElementById('status-label'); 
+    const statusLabel = document.getElementById('status-label');
     const infoTech = document.getElementById('info-tech');
     const infoRes = document.getElementById('info-res');
-    // ... (λοιπά controls elements) ...
+
     const ppBtn = document.getElementById('ppBtn');
     const rwBtn = document.getElementById('rwBtn');
     const fwBtn = document.getElementById('fwBtn');
     const muteBtn = document.getElementById('muteBtn');
+    const fsBtn = document.getElementById('fsBtn');
     const proBar = document.getElementById('proBar');
     const proFill = document.getElementById('proFill');
     const proTooltip = document.getElementById('proTooltip');
     const timeLabel = document.getElementById('timeLabel');
     const qualitySelect = document.getElementById('qualitySelect');
     const subToggleBtn = document.getElementById('subToggleBtn');
-    
+
     let hlsInstance = null;
     let dashInstance = null;
-    // ... (λοιπές μεταβλητές) ...
     let hlsLevels = [];
     let wakeLock = null; 
-
+    let activeSubtitleTrack = null;
+    
+    // CUSTOM NAMESPACE
     const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
 
-    /* --- Core Player Functions (loadStream, setStatus, attachSubtitles, controls...) --- */
+    /* --- Focus/Controls Vars --- */
+    const focusableControls = [ppBtn, rwBtn, fwBtn, subToggleBtn, qualitySelect, muteBtn, fsBtn].filter(Boolean);
+    let focusIndex = -1;
+
+    focusableControls.forEach(el => { el.setAttribute('tabindex', '0'); });
+    function applyFocusRing() { focusableControls.forEach(el => el && el.classList.remove('focus-ring')); if (focusIndex >= 0 && focusIndex < focusableControls.length) { const el = focusableControls[focusIndex]; if (el) { el.classList.add('focus-ring'); el.focus(); } } }
+    function setFocus(index) { if (!focusableControls.length) return; if (index < 0) index = focusableControls.length - 1; if (index >= focusableControls.length) index = 0; focusIndex = index; document.body.classList.add('controls-visible'); applyFocusRing(); }
+    function clearFocus() { focusIndex = -1; focusableControls.forEach(el => el && el.classList.remove('focus-ring')); }
     
-    function log(message, type = 'info') {
-      // Σε αυτόν τον τελικό player, το log πάει μόνο στην console
-      console.log(`[GRMF PRO PLAYER - ${type.toUpperCase()}]`, message);
+    /* --- Player Utilities --- */
+    function log(message, type = 'info') { console.log(`[GRMF PRO PLAYER - ${type.toUpperCase()}]`, message); }
+    function setStatus(text, type = 'info') { statusLabel.textContent = text; const isLoading = (text === 'Loading' || text === 'Buffering'); if (isLoading) { loadingIndicator.classList.add('visible'); } else { loadingIndicator.classList.remove('visible'); } }
+    
+    function formatTime(seconds) {
+      if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
+      const s = Math.floor(seconds % 60); const m = Math.floor((seconds / 60) % 60); const h = Math.floor(seconds / 3600); const pad = (n) => n.toString().padStart(2, '0');
+      if (h > 0) { return `${h}:${pad(m)}:${pad(s)}`; } return `${pad(m)}:${pad(s)}`;
     }
     
-    function setStatus(text, type = 'info') {
-      statusLabel.textContent = text;
-      const isLoading = (text === 'Loading' || text === 'Buffering');
-      if (isLoading) { loadingIndicator.classList.add('visible'); } else { loadingIndicator.classList.remove('visible'); }
-      // ... (χρωματισμός loading indicator) ...
+    function togglePlayPause() { if (video.paused) { video.play().catch(() => {}); } else { video.pause(); } }
+    
+    /* --- Keep Awake Logic --- */
+    async function requestWakeLock() { if ('wakeLock' in navigator) { try { wakeLock = await navigator.wakeLock.request('screen'); } catch (err) {} } }
+    function releaseWakeLock() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
+    
+    /* --- Subtitles & Quality Functions --- */
+    function clearTracks() { const tracks = video.querySelectorAll('track'); tracks.forEach(t => t.remove()); activeSubtitleTrack = null; if (subToggleBtn) { subToggleBtn.disabled = true; subToggleBtn.textContent = 'Subs: Off'; } }
+    function attachSubtitles(url, label) {
+        if (!url || url === 'NULL' || url.trim() === '') { clearTracks(); return; }
+        clearTracks();
+        const track = document.createElement('track'); track.kind = 'subtitles'; track.label = label || 'Subtitles'; track.srclang = 'el'; track.src = url; track.default = true; video.appendChild(track);
+        activeSubtitleTrack = track; const textTracks = video.textTracks; for (let i = 0; i < textTracks.length; i++) { textTracks[i].mode = (textTracks[i].label === track.label) ? 'showing' : 'disabled'; }
+        if (subToggleBtn) { subToggleBtn.disabled = false; subToggleBtn.dataset.state = 'on'; subToggleBtn.textContent = 'Subs: On'; }
+    }
+    function destroyHls() { if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; } hlsLevels = []; }
+    function destroyDash() { if (dashInstance && typeof dashInstance.reset === 'function') { dashInstance.reset(); } dashInstance = null; }
+    function resetQualityUI() { if (!qualitySelect) return; qualitySelect.innerHTML = '<option value="-1">Auto</option>'; qualitySelect.disabled = true; qualitySelect.value = '-1'; infoRes.textContent = 'Resolution: auto'; }
+
+    /* --- loadStream (Μετατροπή σε Promise) --- */
+    async function loadStream(videoUrl, subUrl, subLabel) {
+        return new Promise((resolve, reject) => {
+            requestWakeLock();
+            destroyHls(); destroyDash(); clearTracks(); resetQualityUI();
+
+            if (!videoUrl || videoUrl.trim() === '') { log('No video URL provided. Stopping load.', 'error'); setStatus('Error'); reject(new Error('No URL')); return; }
+
+            setStatus('Loading'); infoTech.textContent = 'HTML5';
+            const urlLower = videoUrl.toLowerCase();
+            const isHls = urlLower.includes('.m3u8');
+            const isDash = urlLower.includes('.mpd');
+            
+            if (isHls && window.Hls && window.Hls.isSupported()) {
+                infoTech.textContent = 'hls.js';
+                hlsInstance = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 60 });
+                hlsInstance.on(Hls.Events.ERROR, function (event, data) { if (data.fatal) { log(`HLS fatal error: ${data.type}`, 'error'); setStatus('Error'); destroyHls(); releaseWakeLock(); reject(new Error(`HLS Fatal: ${data.type}`)); return; } });
+                hlsInstance.on(Hls.Events.MANIFEST_LOADED, function (event, data) { hlsLevels = data.levels; /* ... Quality UI Logic ... */ });
+                hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+                    log('HLS manifest parsed, starting playback…', 'cast');
+                    attachSubtitles(subUrl, subLabel);
+                    video.play().catch((e) => { log('Autoplay blocked.', 'error'); });
+                    resolve();
+                });
+                hlsInstance.loadSource(videoUrl);
+                hlsInstance.attachMedia(video);
+            } else if (isDash && window.dashjs) {
+                infoTech.textContent = 'dash.js';
+                dashInstance = dashjs.MediaPlayer().create();
+                dashInstance.initialize(video, videoUrl, true);
+                attachSubtitles(subUrl, subLabel);
+                dashInstance.on('error', function (e) { log('DASH error: ' + (e ? JSON.stringify(e) : 'unknown'), 'error'); setStatus('Error'); reject(new Error('DASH error')); });
+                resolve();
+            } else {
+                infoTech.textContent = 'HTML5';
+                video.src = videoUrl; attachSubtitles(subUrl, subLabel); video.load();
+                video.play().then(resolve).catch((e) => { log('Autoplay blocked.', 'error'); resolve(); });
+            }
+        });
     }
 
-    function clearTracks() { /* ... */ } // (Κώδικας παραλείπεται για συντομία - χρησιμοποίησε τον παλιό, πλήρη)
-    function attachSubtitles(url, label) { 
-        if (!url || url === 'NULL' || url.trim() === '') { clearTracks(); return; } 
-        // ... (πλήρης λογική)
-    } 
+    /* --- Video Event Listeners (για Controls) --- */
+    video.addEventListener('playing', () => { setStatus('Playing'); requestWakeLock(); ppBtn.textContent = '⏸'; });
+    video.addEventListener('pause', () => { setStatus('Paused'); ppBtn.textContent = '▶'; });
+    video.addEventListener('waiting', () => { setStatus('Buffering'); });
+    video.addEventListener('error', () => { log('Video Error!', 'error'); setStatus('Error'); releaseWakeLock(); });
+    video.addEventListener('timeupdate', () => { 
+        if (!video.duration) return; const percent = (video.currentTime / video.duration) * 100; proFill.style.width = percent + '%'; 
+        const current = formatTime(video.currentTime || 0); const total = formatTime(video.duration || 0); timeLabel.textContent = `${current} / ${total}`;
+    });
 
-    function destroyHls() { /* ... */ } // (Κώδικας παραλείπεται για συντομία)
-    function destroyDash() { /* ... */ } // (Κώδικας παραλείπεται για συντομία)
-    function resetQualityUI() { /* ... */ } // (Κώδικας παραλείπεται για συντομία)
+    /* --- Button & Keydown Handlers (για TV Remote) --- */
+    ppBtn.onclick = () => togglePlayPause();
+    rwBtn.onclick = () => { if (!isNaN(video.currentTime)) { video.currentTime = Math.max(0, (video.currentTime || 0) - 10); } };
+    fwBtn.onclick = () => { if (video.duration) { video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10); } };
+    muteBtn.onclick = () => { video.muted = !video.muted; muteBtn.textContent = video.muted ? '🔇' : '🔊'; };
+    fsBtn.onclick = () => { /* ... Fullscreen Logic ... */ };
 
-    // Ο loadStream πρέπει να παραμείνει Promise
-    function loadStream(videoUrl, subUrl, subLabel) {
-      return new Promise((resolve, reject) => {
-        // ... (πλήρης λογική hls.js / dash.js / native loading) ...
-        // [ΣΗΜΕΙΩΣΗ: Πρέπει να αντικαταστήσεις αυτό το comment με τον πλήρη κώδικα της loadStream, συμπεριλαμβανομένων των resolve/reject]
-
-        // Εδώ ένα placeholder για να μη σπάσει ο κώδικας του Cast
-        log(`Loading stream via Custom Channel: ${videoUrl}`, 'custom');
-        video.src = videoUrl;
-        attachSubtitles(subUrl, subLabel);
-        video.load();
-        video.play().then(resolve).catch((e) => { 
-            log('Autoplay blocked.', 'info'); 
-            reject(e); // Σφάλμα φόρτωσης
-        }); 
-      });
-    }
-
-    // ... (όλες οι συναρτήσεις controls: togglePlayPause, formatTime, updateTimeLabel, event listeners, keydown) ...
-    // [ΣΗΜΕΙΩΣΗ: Πρέπει να συμπεριλάβεις ξανά ΟΛΗ τη λογική των controls / event listeners / keydown που είχαμε φτιάξει].
+    proBar.addEventListener('mousemove', (e) => { /* ... Tooltip Logic ... */ });
+    proBar.addEventListener('mouseleave', () => { /* ... Tooltip Logic ... */ });
+    proBar.addEventListener('click', (e) => { /* ... Seek Logic ... */ });
+    
+    window.addEventListener('keydown', (e) => {
+        // [Χρησιμοποίησε τον πλήρη κώδικα του keydown handler για TV remote]
+        const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
+        document.body.classList.add('controls-visible');
+        if (e.key === ' ' || e.key === 'MediaPlayPause') { e.preventDefault(); togglePlayPause(); return; }
+        if (e.key === 'Enter') { 
+            e.preventDefault(); 
+            if (focusIndex >= 0 && focusIndex < focusableControls.length) { 
+                const el = focusableControls[focusIndex]; if (el && typeof el.click === 'function') { el.click(); } 
+            } else { togglePlayPause(); } 
+            return; 
+        }
+        switch (e.key) {
+            case 'ArrowLeft': e.preventDefault(); if (focusIndex === -1) { if (!isNaN(video.currentTime)) { video.currentTime = Math.max(0, (video.currentTime || 0) - 10); } if (focusableControls.length) setFocus(0); } else { setFocus(focusIndex - 1); } break;
+            case 'ArrowRight': e.preventDefault(); if (focusIndex === -1) { if (video.duration) { video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10); } if (focusableControls.length) setFocus(0); } else { setFocus(focusIndex + 1); } break;
+            case 'ArrowUp': e.preventDefault(); video.volume = Math.min(1, (video.volume || 0) + 0.05); break;
+            case 'ArrowDown': e.preventDefault(); video.volume = Math.max(0, (video.volume || 0) - 0.05); break;
+            case 'Escape': e.preventDefault(); clearFocus(); document.body.classList.remove('controls-visible'); break;
+        }
+    });
 
     /* --- CAF CAST RECEIVER INTEGRATION --- */
 
     window.onload = function() {
-        if (window.cast && window.cast.framework) {
+        if (!window.cast || !window.cast.framework) { log('CAF SDK not found.', 'error'); return; }
             
-            const context = cast.framework.CastReceiverContext.getInstance();
-            const playerManager = context.getPlayerManager();
+        const context = cast.framework.CastReceiverContext.getInstance();
+        const playerManager = context.getPlayerManager();
+        
+        // --- FIXES ---
+        const playbackConfig = new cast.framework.PlaybackConfig();
+        playbackConfig.mediaElement = document.getElementById('cast-player-player');
+        context.setPlaybackConfig(playbackConfig); 
+        playerManager.setMediaElement(video);
+        
+        // 3. Ακούμε το Custom Message Channel
+        context.addCustomMessageListener(NAMESPACE, function (event) {
             
-            // --- FIXES ---
-            // 1. Χρησιμοποιούμε το dummy element για τον player του CAF
-            const playbackConfig = new cast.framework.PlaybackConfig();
-            playbackConfig.mediaElement = document.getElementById('cast-player-player');
-            context.setPlaybackConfig(playbackConfig); 
-            
-            // 2. Υποχρεώνουμε το Player Manager να χρησιμοποιήσει το δικό μας video tag
-            playerManager.setMediaElement(video);
-            
-            // 3. Ακούμε το Custom Message Channel
-            context.addCustomMessageListener(NAMESPACE, function (event) {
+            log('Custom Message Received! Starting custom load.', 'cast');
+
+            try {
+                const data = JSON.parse(event.data); 
+                const videoUrl = data.url;
+                const subUrl = data.subUrl; 
                 
-                log('Custom Message Received! Starting custom load.', 'cast');
-
-                try {
-                    // event.data είναι ήδη JSON object αν το στείλαμε με Cast API
-                    const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-
-                    const videoUrl = data.url;
-                    const subUrl = data.subUrl; 
-                    
-                    if (videoUrl) {
-                        // Καλούμε τον δικό μας loadStream με τα δεδομένα του Custom Message
-                        loadStream(videoUrl, subUrl, 'Greek')
-                            .then(() => {
-                                log('Custom Player Load SUCCESS.', 'cast');
-                            })
-                            .catch((e) => {
-                                log(`Custom Player Load FAILED: ${e.message}`, 'error');
-                            });
-                    }
-                } catch (e) {
-                    log(`Failed to parse custom JSON: ${e.message}`, 'error');
+                if (videoUrl) {
+                    loadStream(videoUrl, subUrl, 'Greek')
+                        .catch((e) => {
+                            log(`Custom Player Load FAILED: ${e.message}`, 'error');
+                        });
                 }
-            });
+            } catch (e) {
+                log(`Failed to parse custom JSON: ${e.message}`, 'error');
+            }
+        });
 
-            // Ξεκινάμε τον Context
-            context.start();
-            
-        } else {
-            log('CAF SDK not found.', 'error');
-        }
+        // Ξεκινάμε τον Context
+        context.start();
     };
-</script>
+  </script>
 </body>
 </html>
