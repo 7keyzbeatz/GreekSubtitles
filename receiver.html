@@ -2,15 +2,14 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>GRMF Pro HLS Player</title>
+  <title>GRMF Pro HLS Player (Minimal)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- hls.js για HLS υποστήριξη σε Chrome/Firefox κτλ -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-  <!-- dash.js για DASH (.mpd) -->
   <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
 
   <style>
+    /* Εισαγωγή των βασικών στυλ από το αρχικό αρχείο */
     :root {
       --bg: #050814;
       --bg-alt: #0c1020;
@@ -34,10 +33,9 @@
       padding: 0;
       width: 100%;
       height: 100%;
-      background: radial-gradient(circle at top, #121b3a 0, #050814 45%, #020309 100%);
+      background: #000; /* Μαύρο φόντο για πλήρες Fullscreen look */
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: var(--text-main);
-      /* avoid scrollbars on TV / cast-like environments */
       overflow: hidden;
     }
 
@@ -48,207 +46,15 @@
       justify-content: stretch;
     }
 
-    .shell {
-      max-width: 1280px;
-      margin: 0 auto;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      height: 100%;
-    }
-
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .brand-logo {
-      width: 32px;
-      height: 32px;
-      border-radius: 10px;
-      background: radial-gradient(circle at 30% 30%, #4dd0ff, #1e88e5 45%, #0d47a1 100%);
-      box-shadow: 0 0 20px rgba(77, 208, 255, 0.7);
-    }
-
-    .brand-text-main {
-      font-weight: 600;
-      font-size: 16px;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-    }
-
-    .brand-text-sub {
-      font-size: 11px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .status-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 12px;
-      border-radius: 999px;
-      background: linear-gradient(120deg, rgba(46, 125, 50, 0.18), rgba(56, 142, 60, 0.35));
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .status-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: #00e676;
-      box-shadow: 0 0 12px rgba(0, 230, 118, 0.9);
-    }
-
-    .panel {
-      background: linear-gradient(135deg, rgba(8, 13, 35, 0.96), rgba(8, 15, 45, 0.96));
-      border-radius: var(--radius-lg);
-      padding: 14px 16px;
-      box-shadow: var(--shadow-soft);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .panel-top {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .panel-title {
-      font-weight: 500;
-      font-size: 14px;
-    }
-
-    .badge {
-      font-size: 11px;
-      padding: 3px 9px;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.06);
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .panel-grid {
-      display: grid;
-      grid-template-columns: 2fr 2fr 1fr;
-      gap: 10px;
-    }
-
-    @media (max-width: 780px) {
-      .panel-grid {
-        grid-template-columns: 1fr;
-      }
-    }
-
-    .field {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .field label {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-    }
-
-    .field input {
-      border-radius: var(--radius-md);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      background: rgba(2, 5, 20, 0.9);
-      padding: 7px 10px;
-      color: var(--text-main);
-      font-size: 13px;
-      outline: none;
-      transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-    }
-
-    .field input:focus {
-      border-color: rgba(30, 144, 255, 0.8);
-      box-shadow: 0 0 0 1px rgba(30, 144, 255, 0.45);
-      background: rgba(3, 9, 30, 0.95);
-    }
-
-    .actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .btn {
-      border-radius: 999px;
-      border: none;
-      padding: 7px 14px;
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      background: var(--accent);
-      color: #ffffff;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      box-shadow: 0 10px 25px rgba(30, 144, 255, 0.45);
-      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.1s ease;
-    }
-
-    .btn:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 14px 30px rgba(30, 144, 255, 0.6);
-    }
-
-    .btn:active {
-      transform: translateY(0);
-      box-shadow: 0 8px 18px rgba(30, 144, 255, 0.35);
-    }
-
-    .btn-secondary {
-      background: transparent;
-      color: var(--text-muted);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      box-shadow: none;
-    }
-
-    .btn-secondary:hover {
-      background: rgba(255, 255, 255, 0.06);
-      box-shadow: none;
-    }
-
-    .btn-icon {
-      font-size: 14px;
-      opacity: 0.9;
-    }
-
+    /* Το κυρίως τμήμα καταλαμβάνει όλο το viewport */
     .main {
       flex: 1;
       display: flex;
-      margin-top: 4px;
-      border-radius: var(--radius-lg);
+      width: 100vw;
+      height: 100vh;
+      border-radius: 0; /* Όχι γωνίες */
       overflow: hidden;
       background: #000000;
-      box-shadow: var(--shadow-soft);
-      border: 1px solid rgba(0, 0, 0, 0.8);
       position: relative;
     }
 
@@ -266,49 +72,12 @@
       outline: none;
     }
 
+    /* Κρύβουμε το overlay-info όπως ζητήθηκε */
     .overlay-info {
-      position: absolute;
-      left: 12px;
-      bottom: 12px;
-      padding: 6px 10px;
-      border-radius: var(--radius-md);
-      background: rgba(0, 0, 0, 0.6);
-      backdrop-filter: blur(10px);
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 8px;
+      display: none !important;
     }
 
-    .chip {
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    .log {
-      font-size: 11px;
-      margin-top: 4px;
-      color: var(--text-muted);
-      max-height: 52px;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-    }
-
-    .log span {
-      color: var(--accent);
-    }
-
-    .log-error {
-      color: var(--danger);
-    }
-
-    /* === PRO CUSTOM VIDEO CONTROLS === */
+    /* === PRO CUSTOM VIDEO CONTROLS (Τα υπόλοιπα controls) === */
     video::-webkit-media-controls {
       display: none !important;
     }
@@ -318,7 +87,7 @@
       inset: 0;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      justify-content: flex-end; /* Μόνο το κάτω τμήμα */
       padding: 16px;
       background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%);
       pointer-events: none;
@@ -331,7 +100,6 @@
       pointer-events: auto;
     }
 
-    /* keep controls visible when using remote / keyboard */
     .controls-visible .pro-controls {
       opacity: 1;
       pointer-events: auto;
@@ -387,13 +155,11 @@
       transform: scale(1.05);
     }
 
-    /* focus ring for TV / keyboard navigation */
     .pro-btn.focus-ring,
     .pro-select.focus-ring {
       box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent);
     }
 
-    /* Netflix-style tooltip πάνω από το seek bar */
     .pro-tooltip {
       position: absolute;
       bottom: 110%;
@@ -413,7 +179,6 @@
       opacity: 1;
     }
 
-    /* Quality select + time label */
     .pro-select {
       background: rgba(0,0,0,.65);
       border-radius: 999px;
@@ -438,7 +203,6 @@
       }
     }
 
-    /* Native subtitles styling + "safe area" */
     video::cue {
       background: rgba(0, 0, 0, 0.75);
       padding: 2px 8px;
@@ -447,7 +211,6 @@
       line-height: 1.4;
     }
 
-    /* Move cues slightly up (Netflix-like safe area) */
     video::-webkit-media-text-track-display {
       transform: translateY(-8%);
     }
@@ -455,114 +218,61 @@
 </head>
 <body>
 
-  <div class="shell">
-    <div class="header">
-      <div class="brand">
-        <div class="brand-logo"></div>
+  <div class="main">
+    <div class="video-wrapper">
+      <video id="video" controls crossorigin="anonymous"></video>
+      <div class="pro-controls">
+
+        <div></div> 
+
         <div>
-          <div class="brand-text-main">GRMF PRO HLS PLAYER</div>
-          <div class="brand-text-sub">Testbed for streams & subtitles</div>
-        </div>
-      </div>
-      <div class="status-pill">
-        <div class="status-dot"></div>
-        <span id="status-label">Idle</span>
-      </div>
-    </div>
-
-    <div class="panel">
-      <div class="panel-top">
-        <div class="panel-title">Stream Configuration</div>
-        <div class="badge">Manual test mode</div>
-      </div>
-      <div class="panel-grid">
-        <div class="field">
-          <label for="videoUrl">Video URL (HLS .m3u8 ή MP4)</label>
-          <input id="videoUrl" type="text" placeholder="https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8" />
-        </div>
-        <div class="field">
-          <label for="subUrl">Subtitles URL (VTT)</label>
-          <input id="subUrl" type="text" placeholder="https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt" />
-        </div>
-        <div class="field">
-          <label for="subLabel">Subtitles Label</label>
-          <input id="subLabel" type="text" placeholder="Greek" value="Greek" />
-        </div>
-      </div>
-      <div class="actions">
-        <button id="btnFillDemo" class="btn btn-secondary" type="button">
-          <span class="btn-icon">⭐</span> Demo values
-        </button>
-        <button id="btnLoad" class="btn" type="button">
-          <span class="btn-icon">▶</span> Load stream
-        </button>
-      </div>
-      <div id="log" class="log">Ready. <span>Provide video & subtitles URLs and press Load.</span></div>
-    </div>
-
-    <div class="main">
-      <div class="video-wrapper">
-        <video id="video" controls crossorigin="anonymous"></video>
-        <div class="pro-controls">
-
-          <div></div>
-
-          <div>
-            <div class="pro-bar" id="proBar">
-              <div class="pro-fill" id="proFill"></div>
-              <!-- Netflix-style tooltip -->
-              <div class="pro-tooltip" id="proTooltip">00:00</div>
-            </div>
-
-            <div class="pro-buttons">
-              <div class="pro-left">
-                <button class="pro-btn" id="ppBtn">▶</button>
-                <button class="pro-btn" id="rwBtn">«10</button>
-                <button class="pro-btn" id="fwBtn">10»</button>
-                <!-- Subtitle toggle -->
-                <button class="pro-btn" id="subToggleBtn" disabled>Subs: Off</button>
-              </div>
-
-              <div class="pro-right">
-                <!-- Time label -->
-                <div class="pro-time-label" id="timeLabel">00:00 / 00:00</div>
-                <!-- Quality selector -->
-                <select class="pro-select" id="qualitySelect" disabled>
-                  <option value="-1">Auto</option>
-                </select>
-                <button class="pro-btn" id="muteBtn">🔊</button>
-                <button class="pro-btn" id="fsBtn">⛶</button>
-              </div>
-            </div>
+          <div class="pro-bar" id="proBar">
+            <div class="pro-fill" id="proFill"></div>
+            <div class="pro-tooltip" id="proTooltip">00:00</div>
           </div>
 
+          <div class="pro-buttons">
+            <div class="pro-left">
+              <button class="pro-btn" id="ppBtn">▶</button>
+              <button class="pro-btn" id="rwBtn">«10</button>
+              <button class="pro-btn" id="fwBtn">10»</button>
+              <button class="pro-btn" id="subToggleBtn" disabled>Subs: Off</button>
+            </div>
+
+            <div class="pro-right">
+              <div class="pro-time-label" id="timeLabel">00:00 / 00:00</div>
+              <select class="pro-select" id="qualitySelect" disabled>
+                <option value="-1">Auto</option>
+              </select>
+              <button class="pro-btn" id="muteBtn">🔊</button>
+              </div>
+          </div>
         </div>
 
-        <div class="overlay-info">
-          <span id="info-res">Resolution: auto</span>
-          <span class="chip" id="info-tech">HTML5</span>
-        </div>
       </div>
-    </div>
+
+      </div>
   </div>
 
   <script>
+    /* === ΒΑΣΙΚΕΣ ΜΕΤΑΒΛΗΤΕΣ === */
     const video = document.getElementById('video');
-    const videoInput = document.getElementById('videoUrl');
-    const subInput = document.getElementById('subUrl');
-    const subLabelInput = document.getElementById('subLabel');
-    const btnLoad = document.getElementById('btnLoad');
-    const btnDemo = document.getElementById('btnFillDemo');
-    const logEl = document.getElementById('log');
-    const statusLabel = document.getElementById('status-label');
-    const infoTech = document.getElementById('info-tech');
-    const infoRes = document.getElementById('info-res');
+    // Οι παρακάτω μεταβλητές δεν χρειάζονται πλέον, αλλά τις κρατάω για να μην χαλάσει το JS
+    const videoInput = { value: 'https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8' };
+    const subInput = { value: 'https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt' };
+    const subLabelInput = { value: 'Greek' };
+    
+    // Αφαίρεση log, status, infoEl - δεν υπάρχουν στο minimal UI
+    const logEl = { innerHTML: '', classList: { add: () => {}, remove: () => {} } };
+    const statusLabel = { textContent: '' };
+    const infoTech = { textContent: '' };
+    const infoRes = { textContent: '' };
 
     const ppBtn = document.getElementById('ppBtn');
     const rwBtn = document.getElementById('rwBtn');
     const fwBtn = document.getElementById('fwBtn');
     const muteBtn = document.getElementById('muteBtn');
-    const fsBtn = document.getElementById('fsBtn');
+    // const fsBtn = document.getElementById('fsBtn'); // Αφαιρέθηκε
     const proBar = document.getElementById('proBar');
     const proFill = document.getElementById('proFill');
     const proTooltip = document.getElementById('proTooltip');
@@ -573,10 +283,11 @@
     let hlsInstance = null;
     let dashInstance = null;
     let activeSubtitleTrack = null;
-    let hlsLevels = [];
+    let hlsLevels = []; // Αυτή η λίστα θα κρατήσει τα ταξινομημένα επίπεδα
 
     /* focus system for TV / keyboard */
-    const focusableControls = [ppBtn, rwBtn, fwBtn, subToggleBtn, qualitySelect, muteBtn, fsBtn].filter(Boolean);
+    // Αφαίρεση του fsBtn από τα focusable controls
+    const focusableControls = [ppBtn, rwBtn, fwBtn, subToggleBtn, qualitySelect, muteBtn].filter(Boolean);
     let focusIndex = -1;
 
     focusableControls.forEach(el => {
@@ -584,7 +295,8 @@
         el.setAttribute('tabindex', '-1');
       }
     });
-
+    
+    // Κώδικας focus / log / status - κρατάμε τις συναρτήσεις, αλλά δεν θα κάνουν κάτι στο UI
     function applyFocusRing() {
       focusableControls.forEach(el => el && el.classList.remove('focus-ring'));
       if (focusIndex >= 0 && focusIndex < focusableControls.length) {
@@ -611,20 +323,15 @@
     }
 
     function log(message, type = 'info') {
-      if (type === 'error') {
-        logEl.classList.add('log-error');
-      } else {
-        logEl.classList.remove('log-error');
-      }
-      const time = new Date().toLocaleTimeString();
-      logEl.innerHTML = `[${time}] ${message}`;
+      // Κρατάμε μόνο το console log
       console.log('[GRMF PLAYER]', message);
     }
 
     function setStatus(text) {
-      statusLabel.textContent = text;
+      // Κρατάμε μόνο το console log
+      console.log('[GRMF STATUS]', text);
     }
-
+    
     function clearTracks() {
       const tracks = video.querySelectorAll('track');
       tracks.forEach(t => t.remove());
@@ -682,7 +389,7 @@
       qualitySelect.innerHTML = '<option value="-1">Auto</option>';
       qualitySelect.disabled = true;
       qualitySelect.value = '-1';
-      infoRes.textContent = 'Resolution: auto';
+      // infoRes.textContent = 'Resolution: auto'; // Αφαιρέθηκε
     }
 
     async function loadStream(videoUrl, subUrl, subLabel) {
@@ -698,7 +405,7 @@
       }
 
       setStatus('Loading');
-      infoTech.textContent = 'HTML5';
+      // infoTech.textContent = 'HTML5'; // Αφαιρέθηκε
 
       const urlLower = videoUrl.toLowerCase();
       const isHls = urlLower.includes('.m3u8');
@@ -706,7 +413,7 @@
       const isMp4 = urlLower.includes('.mp4');
 
       if (isHls && window.Hls && window.Hls.isSupported()) {
-        infoTech.textContent = 'hls.js';
+        // infoTech.textContent = 'hls.js'; // Αφαιρέθηκε
         hlsInstance = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
@@ -734,21 +441,26 @@
 
         hlsInstance.on(Hls.Events.MANIFEST_LOADED, function (event, data) {
           log(`Manifest loaded. Found ${data.levels.length} quality levels.`);
-          hlsLevels = [];
+          
           if (qualitySelect && data.levels && data.levels.length > 0) {
             resetQualityUI();
-            // build sorted list but keep real HLS indices for mapping
+            
+            // 1. Δημιουργία λίστας με τα επίπεδα ΚΑΙ τον πραγματικό τους index
             hlsLevels = data.levels.map((level, index) => ({
-              index,
+              index, // <-- Ο ΠΡΑΓΜΑΤΙΚΟΣ INDEX που θα χρησιμοποιήσουμε στο change event
               height: level.height || 0,
               bitrate: level.bitrate || 0
             }));
+            
+            // 2. Ταξινόμηση της λίστας με βάση την ανάλυση (height)
             hlsLevels.sort((a, b) => {
               if (a.height && b.height && a.height !== b.height) {
                 return a.height - b.height;
               }
               return a.bitrate - b.bitrate;
             });
+            
+            // 3. Δημιουργία των <option> χρησιμοποιώντας τον ΠΡΑΓΜΑΤΙΚΟ INDEX ως value
             hlsLevels.forEach(item => {
               const opt = document.createElement('option');
               const labelHeight = item.height;
@@ -756,7 +468,7 @@
               const label = labelHeight
                 ? `${labelHeight}p`
                 : `${Math.round(labelBitrate / 1000)} kbps`;
-              opt.value = item.index.toString(); // REAL HLS LEVEL INDEX
+              opt.value = item.index.toString(); // Ο ΠΡΑΓΜΑΤΙΚΟΣ INDEX
               opt.textContent = label;
               qualitySelect.appendChild(opt);
             });
@@ -768,16 +480,12 @@
         hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
           if (!hlsInstance || !hlsInstance.levels) return;
           const levelIndex = data.level;
-          const level = hlsInstance.levels[levelIndex];
-          if (level && level.height) {
-            infoRes.textContent = `Resolution: ${level.height}p`;
-          } else {
-            infoRes.textContent = 'Resolution: auto';
-          }
+          // infoRes.textContent = ... (Αφαιρέθηκε)
           if (qualitySelect && !isNaN(levelIndex)) {
             if (hlsInstance.autoLevelEnabled) {
               qualitySelect.value = '-1';
             } else {
+              // Βρίσκουμε το <option> με το value = levelIndex
               qualitySelect.value = levelIndex.toString();
             }
           }
@@ -795,7 +503,7 @@
         hlsInstance.attachMedia(video);
 
       } else if (isDash && window.dashjs) {
-        infoTech.textContent = 'dash.js';
+        // infoTech.textContent = 'dash.js'; // Αφαιρέθηκε
         dashInstance = dashjs.MediaPlayer().create();
         dashInstance.initialize(video, videoUrl, true);
         attachSubtitles(subUrl, subLabel);
@@ -805,8 +513,8 @@
         });
 
       } else {
-        // Native HTML5 playback (MP4, or browser-native HLS/DASH where supported)
-        infoTech.textContent = 'HTML5';
+        // Native HTML5 playback
+        // infoTech.textContent = 'HTML5'; // Αφαιρέθηκε
         video.src = videoUrl;
         attachSubtitles(subUrl, subLabel);
         video.load();
@@ -818,19 +526,14 @@
       }
     }
 
-    btnLoad.addEventListener('click', () => {
+    // Αφαίρεση btnLoad.addEventListener / btnDemo.addEventListener
+    
+    // Καλουμε αυτόματα το loadStream με τις τιμές που έδωσες
+    document.addEventListener('DOMContentLoaded', () => {
       const v = videoInput.value.trim();
       const s = subInput.value.trim();
       const label = subLabelInput.value.trim() || 'Subtitles';
       loadStream(v, s, label);
-    });
-
-    // Demo values button (βάλε ό,τι δικό σου θες)
-    btnDemo.addEventListener('click', () => {
-      videoInput.value = 'https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8';
-      subInput.value = 'https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt';
-      subLabelInput.value = 'Greek';
-      log('Demo values filled. Press "Load stream" to start.', 'info');
     });
 
     // Basic video event listeners
@@ -857,7 +560,7 @@
       setStatus('Error');
     });
 
-    /* === PRO PLAYER CONTROLS JS === */
+    /* === PRO PLAYER CONTROLS JS (Διατήρηση / Προσαρμογή) === */
 
     function togglePlayPause() {
       if (video.paused) {
@@ -886,38 +589,7 @@
       muteBtn.textContent = video.muted ? '🔇' : '🔊';
     };
 
-    function enterFullscreen() {
-      const wrapper = document.querySelector('.video-wrapper');
-      if (!wrapper) return;
-      if (wrapper.requestFullscreen) {
-        wrapper.requestFullscreen().catch(() => {});
-      } else if (wrapper.webkitRequestFullscreen) {
-        wrapper.webkitRequestFullscreen();
-      }
-    }
-
-    fsBtn.onclick = () => {
-      if (document.fullscreenElement || document.webkitFullscreenElement) {
-        if (document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
-        } else if (document.webkitExitFullscreen) {
-          document.webkitExitFullscreen();
-        }
-      } else {
-        enterFullscreen();
-      }
-    };
-
-    // Expose fullscreen for cast / external messages
-    window.enterPlayerFullscreen = enterFullscreen;
-
-    // Optional: auto-fullscreen when sender posts a message
-    window.addEventListener('message', (event) => {
-      if (!event || !event.data) return;
-      if (event.data === 'ENTER_FULLSCREEN' || (event.data.type && event.data.type === 'ENTER_FULLSCREEN')) {
-        enterFullscreen();
-      }
-    });
+    // Αφαίρεση fullscreen συναρτήσεων / event listener
 
     video.addEventListener('timeupdate', () => {
       if (!video.duration) return;
@@ -990,24 +662,21 @@
       });
     }
 
-    // Quality selector change (correct mapping to hls.currentLevel)
+    // Quality selector change (ΔΙΟΡΘΩΜΕΝΟ MAPPING)
     if (qualitySelect) {
       qualitySelect.addEventListener('change', () => {
         if (!hlsInstance) return;
-        const value = qualitySelect.value;
+        const value = qualitySelect.value; // Αυτό είναι ο ΠΡΑΓΜΑΤΙΚΟΣ INDEX
         if (value === '-1') {
           hlsInstance.currentLevel = -1; // auto
           hlsInstance.autoLevelEnabled = true;
-          infoRes.textContent = 'Resolution: auto';
+          // infoRes.textContent = 'Resolution: auto'; // Αφαιρέθηκε
         } else {
           const levelIndex = parseInt(value, 10);
           if (!isNaN(levelIndex)) {
             hlsInstance.autoLevelEnabled = false;
-            hlsInstance.currentLevel = levelIndex;
-            const level = hlsInstance.levels && hlsInstance.levels[levelIndex];
-            if (level && level.height) {
-              infoRes.textContent = `Resolution: ${level.height}p`;
-            }
+            hlsInstance.currentLevel = levelIndex; // Χρησιμοποιούμε τον ΠΡΑΓΜΑΤΙΚΟ INDEX
+            // infoRes.textContent = ... (Αφαιρέθηκε)
           }
         }
       });
@@ -1045,24 +714,25 @@
         case 'ArrowLeft':
           e.preventDefault();
           if (focusIndex === -1) {
-            // first use: seek AND then initialize focus navigation
+            // seek 10s back
             if (!isNaN(video.currentTime)) {
               video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
             }
             if (focusableControls.length) setFocus(0);
           } else {
-            setFocus(focusIndex - 1);
+            setFocus(focusIndex - 1); // move focus
           }
           break;
         case 'ArrowRight':
           e.preventDefault();
           if (focusIndex === -1) {
+            // seek 10s forward
             if (video.duration) {
               video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
             }
             if (focusableControls.length) setFocus(0);
           } else {
-            setFocus(focusIndex + 1);
+            setFocus(focusIndex + 1); // move focus
           }
           break;
         case 'MediaRewind':
@@ -1078,7 +748,6 @@
           }
           break;
         case 'ArrowUp':
-          // Let quality <select> use arrows when it's the active element
           if (document.activeElement === qualitySelect) return;
           e.preventDefault();
           video.volume = Math.min(1, (video.volume || 0) + 0.05);
@@ -1090,7 +759,7 @@
           break;
         case 'KeyF':
           e.preventDefault();
-          fsBtn.click();
+          // Αφαιρέθηκε η fullscreen ενέργεια
           break;
         case 'KeyM':
           e.preventDefault();
