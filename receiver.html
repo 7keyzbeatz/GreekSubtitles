@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <title>Cast Custom Data Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    
-    <script src="//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
+
+    <!-- ΣΩΣΤΟ CAF RECEIVER SCRIPT -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
     <style>
         body {
@@ -16,15 +17,15 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
-            overflow: auto;
             padding: 20px;
         }
         h1 {
-            color: #00bcd4; /* Accent */
+            color: #00bcd4;
             font-size: 32px;
             margin-bottom: 20px;
+            text-align: center;
         }
         .data-viewer {
             background: #1e1e1e;
@@ -34,13 +35,13 @@
             width: 90%;
             max-width: 900px;
             text-align: left;
-            white-space: pre-wrap; 
-            word-wrap: break-word; 
+            white-space: pre-wrap;
+            word-wrap: break-word;
             font-size: 18px;
             line-height: 1.6;
         }
         .label {
-            color: #81c784; /* Greenish */
+            color: #81c784;
             font-weight: bold;
             display: block;
             margin-top: 15px;
@@ -52,75 +53,67 @@
             font-size: 16px;
         }
         .status-ready {
-            color: #ffb74d; /* Amber/Orange */
+            color: #ffb74d;
         }
     </style>
 </head>
 <body>
 
-    <h1>🎬 CAST RECEIVER - CUSTOM MESSAGE DEBUGGER</h1>
+<h1>🎬 CAST RECEIVER - CUSTOM MESSAGE DEBUGGER</h1>
 
-    <div id="dataViewer" class="data-viewer">
-        <span class="label status-ready">STATUS:</span> <span class="value status-ready">Waiting for Cast Connection...</span>
-    </div>
+<div id="dataViewer" class="data-viewer">
+    <span class="label status-ready">STATUS:</span>
+    <span class="value status-ready">Waiting for Cast Connection...</span>
+</div>
 
-    <script>
-        const dataViewer = document.getElementById('dataViewer');
-        const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel'; // ΠΡΕΠΕΙ ΝΑ ΕΙΝΑΙ ΙΔΙΟ ΜΕ ΤΟ JAVA
+<script>
+    const dataViewer = document.getElementById('dataViewer');
+    const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel'; // ΠΡΕΠΕΙ ΝΑ ΤΑΙΡΙΑΖΕΙ ΜΕ ΤΗΝ JAVA
 
-        function displayData(key, value, isStatus = false) {
-            const entry = document.createElement('div');
-            
-            if (isStatus) {
-                dataViewer.innerHTML = '';
-            }
-
-            const keySpan = document.createElement('span');
-            keySpan.classList.add('label');
-            keySpan.textContent = key + ':';
-            
-            const valueSpan = document.createElement('span');
-            valueSpan.classList.add('value');
-            valueSpan.textContent = value;
-            
-            entry.appendChild(keySpan);
-            entry.appendChild(valueSpan);
-            dataViewer.appendChild(entry);
+    function displayData(key, value, clear = false) {
+        if (clear) {
+            dataViewer.innerHTML = '';
         }
 
-        window.onload = function() {
-            if (!window.cast || !window.cast.receiver) {
-                displayData("ERROR", "Cast SDK not loaded.", true);
-                return;
-            }
+        const entry = document.createElement('div');
 
-            const context = cast.receiver.CastReceiverContext.getInstance();
-            displayData("STATUS", "SDK Initialized. Ready to receive.", true);
+        const keySpan = document.createElement('span');
+        keySpan.classList.add('label');
+        keySpan.textContent = key + ':';
 
-            // **************************************************
-            // * ΚΡΙΣΙΜΟ: ΑΚΟΥΜΕ ΤΟ CUSTOM NAMESPACE! *
-            // **************************************************
-            context.addReceiverMessageListener(NAMESPACE, function (message) {
-                
-                displayData("STATUS", "Custom Message Received!", true);
-                displayData("SENDER ID", message.senderId);
-                
-                try {
-                    const data = JSON.parse(message.data);
-                    
-                    displayData("MESSAGE TYPE", data.type || 'N/A');
-                    displayData("VIDEO URL (DIRECT)", data.url || 'URL MISSING');
-                    displayData("SUB URL (DIRECT)", data.subUrl || 'NONE');
+        const valueSpan = document.createElement('span');
+        valueSpan.classList.add('value');
+        valueSpan.textContent = value;
 
-                    displayData("ΕΠΙΒΕΒΑΙΩΣΗ", "Τα δεδομένα έφτασαν επιτυχώς! Η Java Logic είναι ΟΚ!");
+        entry.appendChild(keySpan);
+        entry.appendChild(valueSpan);
+        dataViewer.appendChild(entry);
+    }
 
-                } catch (e) {
-                    displayData("ERROR", "Failed to parse JSON message: " + e.message, true);
-                }
-            });
-            
-            context.start();
-        };
-    </script>
+    // CAF Receiver
+    const context = cast.framework.CastReceiverContext.getInstance();
+
+    displayData('STATUS', 'CAF Receiver initialized. Waiting for messages...', true);
+
+    // ΑΚΟΥΜΕ ΤΟ CUSTOM NAMESPACE
+    context.addCustomMessageListener(NAMESPACE, function (event) {
+        displayData('STATUS', 'Custom Message Received!', true);
+
+        try {
+            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+
+            displayData('MESSAGE TYPE', data.type || 'N/A');
+            displayData('VIDEO URL (DIRECT)', data.url || 'URL MISSING');
+            displayData('SUB URL (DIRECT)', data.subUrl || 'NONE');
+            displayData('ΕΠΙΒΕΒΑΙΩΣΗ', 'Τα δεδομένα έφτασαν επιτυχώς! Η Java Logic είναι ΟΚ!');
+
+        } catch (e) {
+            displayData('ERROR', 'Failed to parse JSON message: ' + e.message, true);
+        }
+    });
+
+    context.start();
+</script>
+
 </body>
 </html>
