@@ -181,15 +181,24 @@ function loadPlayer() {
     });
 
     hls.on(Hls.Events.MANIFEST_LOADED, (_, d) => {
-      quality.innerHTML = '<option value="-1">Auto</option>';
-      d.levels.forEach((lvl, i) => {
-        const opt = document.createElement("option");
-        opt.value = i;
-        opt.textContent = lvl.height ? lvl.height + "p" : "Level";
-        quality.appendChild(opt);
-      });
-      quality.disabled = false;
-    });
+  quality.innerHTML = '<option value="-1">Auto</option>';
+
+  // Δημιουργία reversed mapping
+  const reversed = d.levels
+    .map((lvl, i) => ({ lvl, i }))
+    .reverse();
+
+  reversed.forEach(item => {
+    const opt = document.createElement("option");
+    opt.value = item.i; // πραγματικό index
+    opt.textContent = item.lvl.height
+      ? item.lvl.height + "p"
+      : "Level";
+    quality.appendChild(opt);
+  });
+
+  quality.disabled = false;
+});
 
     hls.on(Hls.Events.LEVEL_SWITCHED, (_, d) => {
       const level = hls.levels[d.level];
@@ -249,6 +258,34 @@ bar.onclick = (e) => {
 };
 
 window.addEventListener("load", loadPlayer);
+
+quality.setAttribute("tabindex", "0");
+
+quality.addEventListener("focus", () => {
+  document.body.classList.add("show-controls");
+});
+
+window.addEventListener("keydown", (e) => {
+  const isTV = /TV|BRAVIA|AFT|Android TV/i.test(navigator.userAgent);
+
+  if (!isTV) return;
+
+  // Όταν πατάς OK πάνω στο quality menu
+  if (
+    (e.key === "Enter" || e.key === "OK") &&
+    document.activeElement === quality
+  ) {
+    e.preventDefault();
+    quality.click();     // Trick για Android TV
+    quality.size = quality.options.length; // ανοίγει σαν λίστα
+  }
+
+  // Όταν επιλέγεις τιμή
+  if (e.key === "Escape" || e.key === "Backspace") {
+    quality.size = 0;
+  }
+});
+  
 </script>
 
 </body>
