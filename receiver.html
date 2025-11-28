@@ -505,6 +505,35 @@
     <div class="main">
       <div class="video-wrapper">
         <video id="video" controls crossorigin="anonymous"></video>
+        <div id="castInfoPanel" style="
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,0.85);
+  color:#fff;
+  display:none;
+  flex-direction:column;
+  justify-content:center;
+  align-items:center;
+  font-size:14px;
+  padding:20px;
+  z-index:9999;
+  text-align:center;
+">
+  <div style="font-size:20px; margin-bottom:10px;">📡 Cast Stream Info</div>
+
+  <div style="margin:8px 0;">
+    <div style="opacity:.6;">Video URL</div>
+    <div id="castVideoUrl" style="word-break:break-all;"></div>
+  </div>
+
+  <div style="margin:8px 0;">
+    <div style="opacity:.6;">Subtitles URL</div>
+    <div id="castSubUrl" style="word-break:break-all;"></div>
+  </div>
+
+  <div style="margin-top:24px; opacity:.6;">Press OK / Enter to close</div>
+</div>
+
         <div class="pro-controls">
 
           <div></div>
@@ -572,6 +601,15 @@
     const qualitySelect = document.getElementById('qualitySelect');
     const subToggleBtn = document.getElementById('subToggleBtn');
 
+const castInfoPanel = document.getElementById('castInfoPanel');
+const castVideoUrlEl = document.getElementById('castVideoUrl');
+const castSubUrlEl = document.getElementById('castSubUrl');
+
+let lastCastVideoUrl = '';
+let lastCastSubUrl = '';
+let infoPanelVisible = false;
+
+    
     let hlsInstance = null;
     let dashInstance = null;
     let activeSubtitleTrack = null;
@@ -1017,6 +1055,27 @@
 
     // Remote / TV optimized keys with focus system
     window.addEventListener('keydown', (e) => {
+
+// OK button on Android TV remote
+if (e.key === 'Enter') {
+  e.preventDefault();
+
+  if (!infoPanelVisible) {
+    // SHOW panel
+    castVideoUrlEl.textContent = lastCastVideoUrl || 'N/A';
+    castSubUrlEl.textContent = lastCastSubUrl || 'N/A';
+    castInfoPanel.style.display = 'flex';
+    infoPanelVisible = true;
+    return;
+  } else {
+    // HIDE panel
+    castInfoPanel.style.display = 'none';
+    infoPanelVisible = false;
+    return;
+  }
+}
+
+      
       const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
       if (activeTag === 'input' || activeTag === 'textarea') return;
 
@@ -1026,20 +1085,6 @@
       if (e.key === ' ' || e.key === 'MediaPlayPause') {
         e.preventDefault();
         togglePlayPause();
-        return;
-      }
-
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (focusIndex >= 0 && focusIndex < focusableControls.length) {
-          const el = focusableControls[focusIndex];
-          if (el && typeof el.click === 'function') {
-            el.click();
-          }
-        } else {
-          // Enter toggles play/pause even if nothing focused
-          togglePlayPause();
-        }
         return;
       }
 
@@ -1132,14 +1177,24 @@ if (window.cast && window.cast.framework) {
       log('Cast cmd: ' + type);
 
       if (type === 'LOAD_URL_DIRECT' && videoUrl) {
-        loadStream(videoUrl, subUrl, subLabel);
 
-        setTimeout(() => {
-          if (typeof window.enterPlayerFullscreen === 'function') {
-            window.enterPlayerFullscreen();
-          }
-        }, 400);
-      }
+  // αποθήκευση info για το info panel
+  lastCastVideoUrl = videoUrl;
+  lastCastSubUrl = subUrl || '';
+
+  // autoplay + fullscreen
+  loadStream(videoUrl, subUrl, subLabel);
+
+  setTimeout(() => {
+    video.muted = false;
+
+    if (typeof window.enterPlayerFullscreen === 'function') {
+      window.enterPlayerFullscreen();
+    }
+
+  }, 500);
+}
+
 
     } catch (e) {
       log('Cast JSON error: ' + e.message, 'error');
