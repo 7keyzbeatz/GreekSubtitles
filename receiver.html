@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Cast Data Viewer - FINAL DUMB RECEIVER</title>
+    <title>Cast Custom Data Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     
     <script src="//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
@@ -22,7 +22,7 @@
             padding: 20px;
         }
         h1 {
-            color: #00bcd4; /* Cyan/Accent */
+            color: #00bcd4; /* Accent */
             font-size: 32px;
             margin-bottom: 20px;
         }
@@ -58,19 +58,19 @@
 </head>
 <body>
 
-    <h1>🎬 CAST RECEIVER - DATA ONLY</h1>
+    <h1>🎬 CAST RECEIVER - CUSTOM MESSAGE DEBUGGER</h1>
 
     <div id="dataViewer" class="data-viewer">
-        <span class="label status-ready">STATUS:</span> <span class="value status-ready">Waiting for Cast LOAD message...</span>
+        <span class="label status-ready">STATUS:</span> <span class="value status-ready">Waiting for Cast Connection...</span>
     </div>
 
     <script>
         const dataViewer = document.getElementById('dataViewer');
+        const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel'; // ΠΡΕΠΕΙ ΝΑ ΕΙΝΑΙ ΙΔΙΟ ΜΕ ΤΟ JAVA
 
         function displayData(key, value, isStatus = false) {
             const entry = document.createElement('div');
             
-            // Καθαρίζουμε το status πριν προσθέσουμε τα δεδομένα
             if (isStatus) {
                 dataViewer.innerHTML = '';
             }
@@ -90,52 +90,35 @@
 
         window.onload = function() {
             if (!window.cast || !window.cast.receiver) {
-                displayData("ERROR", "Cast SDK not loaded or environment is incorrect.", true);
+                displayData("ERROR", "Cast SDK not loaded.", true);
                 return;
             }
 
             const context = cast.receiver.CastReceiverContext.getInstance();
-            const playerManager = context.getPlayerManager();
-            
             displayData("STATUS", "SDK Initialized. Ready to receive.", true);
 
-            playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (loadRequest) => {
+            // **************************************************
+            // * ΚΡΙΣΙΜΟ: ΑΚΟΥΜΕ ΤΟ CUSTOM NAMESPACE! *
+            // **************************************************
+            context.addReceiverMessageListener(NAMESPACE, function (message) {
                 
-                // --- ΕΚΤΕΛΕΣΗ ΜΟΝΟ ΓΙΑ DISPLAY ---
+                displayData("STATUS", "Custom Message Received!", true);
+                displayData("SENDER ID", message.senderId);
                 
-                displayData("STATUS", "LOAD message received!", true);
-                displayData("TIMESTAMP", new Date().toLocaleString());
-                
-                const media = loadRequest.media;
-                const videoUrl = media ? media.contentId : 'N/A';
-                const tracks = media && media.mediaTracks ? media.mediaTracks : [];
-                
-                
-                displayData("VIDEO URL (contentId)", videoUrl || 'NULL / EMPTY');
-                displayData("CONTENT TYPE", media ? media.contentType : 'N/A');
-
-                if (tracks.length > 0) {
-                    displayData("SUBTITLE TRACKS FOUND", tracks.length);
+                try {
+                    const data = JSON.parse(message.data);
                     
-                    tracks.forEach((track, index) => {
-                        if (track.type === cast.framework.messages.MediaTrack.Type.TEXT) {
-                            const subUrl = track.trackContentId || 'URL MISSING';
-                            const subLabel = track.name || track.language || 'Label MISSING';
-                            
-                            displayData(`TRACK ${index + 1} LABEL`, subLabel);
-                            displayData(`TRACK ${index + 1} URL`, subUrl);
-                        }
-                    });
+                    displayData("MESSAGE TYPE", data.type || 'N/A');
+                    displayData("VIDEO URL (DIRECT)", data.url || 'URL MISSING');
+                    displayData("SUB URL (DIRECT)", data.subUrl || 'NONE');
 
-                } else {
-                    displayData("SUBTITLE TRACKS FOUND", "0 (Correct for no subs scenario)");
+                    displayData("ΕΠΙΒΕΒΑΙΩΣΗ", "Τα δεδομένα έφτασαν επιτυχώς! Η Java Logic είναι ΟΚ!");
+
+                } catch (e) {
+                    displayData("ERROR", "Failed to parse JSON message: " + e.message, true);
                 }
-
-                // ΣΗΜΑΝΤΙΚΟ: Δεν κάνουμε load σε media element. Απλά επιστρέφουμε το request.
-                return loadRequest;
             });
             
-            // Ξεκινάμε τον Context. 
             context.start();
         };
     </script>
