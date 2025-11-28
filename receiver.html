@@ -1,15 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>GRMF Cast Hybrid Player</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8">
+  <title>GRMF Netflix Style Cast Receiver</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <!-- HLS & DASH -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-  <script src="https://cdn.dashjs.org/latest/dash.all.min.js"></script>
-
-  <!-- CAF μόνο για messaging -->
   <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
   <style>
@@ -29,8 +25,79 @@
       background: black;
     }
 
+    .overlay {
+      position: fixed;
+      bottom: 0;
+      width: 100%;
+      padding: 30px 20px 20px;
+      background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      opacity: 1;
+      transition: opacity 0.3s ease;
+      z-index: 1000;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .left, .right {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    button, select {
+      background: rgba(20,20,20,0.9);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.2);
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: rgba(50,50,50,1);
+    }
+
+    .seekbar {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    input[type=range] {
+      flex: 1;
+      -webkit-appearance: none;
+      height: 4px;
+      border-radius: 2px;
+      background: rgba(255,255,255,0.3);
+      outline: none;
+      cursor: pointer;
+    }
+
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: white;
+    }
+
     #debug {
-      position: absolute;
+      position: fixed;
       top: 10px;
       left: 10px;
       background: rgba(0,0,0,0.7);
@@ -39,41 +106,95 @@
       padding: 10px;
       border-radius: 10px;
       z-index: 9999;
-      max-width: 90%;
       white-space: pre-wrap;
       word-break: break-word;
+      max-width: 90%;
     }
   </style>
 </head>
 <body>
 
-<div id="debug">Waiting for Cast message…</div>
-<video id="video" controls crossorigin="anonymous"></video>
+<div id="debug">Waiting for stream...</div>
+<video id="video" crossorigin="anonymous"></video>
+
+<div id="overlay" class="overlay hidden">
+
+  <div class="seekbar">
+    <span id="currentTime">0:00</span>
+    <input type="range" id="seek" min="0" max="100" value="0">
+    <span id="duration">0:00</span>
+  </div>
+
+  <div class="controls">
+    <div class="left">
+      <button id="backBtn">⏪ 10s</button>
+      <button id="playPauseBtn">⏸</button>
+      <button id="forwardBtn">10s ⏩</button>
+      <button id="muteBtn">🔊</button>
+    </div>
+
+    <div class="right">
+      <select id="qualityBtn">
+        <option value="auto">AUTO</option>
+        <option value="low">LOW</option>
+        <option value="mid">MEDIUM</option>
+        <option value="high">HIGH</option>
+      </select>
+    </div>
+  </div>
+</div>
 
 <script>
 const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
 
 const video = document.getElementById('video');
 const debug = document.getElementById('debug');
+const overlay = document.getElementById('overlay');
+
+const playPauseBtn = document.getElementById('playPauseBtn');
+const backBtn = document.getElementById('backBtn');
+const forwardBtn = document.getElementById('forwardBtn');
+const muteBtn = document.getElementById('muteBtn');
+const seek = document.getElementById('seek');
+const currentTimeEl = document.getElementById('currentTime');
+const durationEl = document.getElementById('duration');
+const qualityBtn = document.getElementById('qualityBtn');
 
 let hls = null;
-let dash = null;
+let hideTimeout = null;
 
 function log(msg) {
   debug.textContent = msg;
 }
 
-function clearVideo() {
-  if (hls) { hls.destroy(); hls = null; }
-  if (dash) { dash.reset(); dash = null; }
+function formatTime(t) {
+  if (!t || isNaN(t)) return "0:00";
+  const m = Math.floor(t / 60);
+  const s = Math.floor(t % 60).toString().padStart(2, '0');
+  return m + ":" + s;
+}
+
+function showUI() {
+  overlay.classList.remove('hidden');
+  clearTimeout(hideTimeout);
+  hideTimeout = setTimeout(() => {
+    overlay.classList.add('hidden');
+  }, 3000);
+}
+
+document.body.addEventListener('mousemove', showUI);
+
+function clearPlayer() {
+  if (hls) {
+    hls.destroy();
+    hls = null;
+  }
 
   video.pause();
   video.removeAttribute('src');
   video.load();
 
-  // clear tracks
-  const tracks = video.querySelectorAll('track');
-  tracks.forEach(t => t.remove());
+  video.querySelectorAll('track').forEach(t => t.remove());
 }
 
 function attachSubs(url) {
@@ -81,18 +202,16 @@ function attachSubs(url) {
 
   const track = document.createElement('track');
   track.kind = 'subtitles';
-  track.label = 'Subtitles';
-  track.srclang = 'el';
-  track.src = url;
   track.default = true;
-
+  track.src = url;
+  track.label = 'Subs';
   video.appendChild(track);
 }
 
 function playStream(url, subUrl) {
-  clearVideo();
+  clearPlayer();
 
-  log('Loading video...\n' + url + '\nSubs:\n' + subUrl);
+  log('Playing:\n' + url);
 
   if (url.includes('.m3u8') && Hls.isSupported()) {
     hls = new Hls();
@@ -102,47 +221,62 @@ function playStream(url, subUrl) {
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
       attachSubs(subUrl);
       video.play().catch(()=>{});
+      showUI();
     });
-
-  } else if (url.includes('.mpd') && window.dashjs) {
-    dash = dashjs.MediaPlayer().create();
-    dash.initialize(video, url, true);
-    attachSubs(subUrl);
   } else {
     video.src = url;
     attachSubs(subUrl);
     video.play().catch(()=>{});
+    showUI();
   }
 }
 
-// ============ CAST LISTENER ============
+// ==== PLAYER EVENTS ====
+video.addEventListener('timeupdate', () => {
+  seek.value = (video.currentTime / video.duration) * 100 || 0;
+  currentTimeEl.textContent = formatTime(video.currentTime);
+  durationEl.textContent = formatTime(video.duration);
+});
 
+seek.addEventListener('input', () => {
+  video.currentTime = (seek.value / 100) * video.duration;
+});
+
+playPauseBtn.onclick = () => {
+  if (video.paused) {
+    video.play();
+    playPauseBtn.textContent = '⏸';
+  } else {
+    video.pause();
+    playPauseBtn.textContent = '▶';
+  }
+};
+
+backBtn.onclick = () => video.currentTime -= 10;
+forwardBtn.onclick = () => video.currentTime += 10;
+
+muteBtn.onclick = () => {
+  video.muted = !video.muted;
+  muteBtn.textContent = video.muted ? '🔇' : '🔊';
+};
+
+// UI only Quality (real quality change γίνεται από sender)
+qualityBtn.onchange = () => {
+  log('Quality UI set to: ' + qualityBtn.value);
+};
+
+// ==== CAST LISTENER ====
 const context = cast.framework.CastReceiverContext.getInstance();
 
-context.addCustomMessageListener(NAMESPACE, function(event) {
-  try {
-    const data = typeof event.data === 'string'
-      ? JSON.parse(event.data)
-      : event.data;
+context.addCustomMessageListener(NAMESPACE, (event) => {
+  const data = typeof event.data === 'string'
+    ? JSON.parse(event.data)
+    : event.data;
 
-    const videoUrl = data.url || '';
-    const subUrl = data.subUrl || '';
-
-    playStream(videoUrl, subUrl);
-
-  } catch (e) {
-    log('JSON error: ' + e.message);
-  }
+  playStream(data.url || '', data.subUrl || '');
 });
 
 context.start();
-
-// ============ BROWSER DEBUG MODE ============
-if (!window.cast || !cast.framework) {
-  log('Browser mode.\nUse: playTest(videoUrl, subUrl)');
-
-  window.playTest = (url, sub) => playStream(url, sub);
-}
 </script>
 
 </body>
