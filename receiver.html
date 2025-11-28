@@ -1,159 +1,3 @@
-<!DOCTYPE html>
-<html lang="el">
-<head>
-  <meta charset="UTF-8">
-  <title>Fullscreen HLS Cast Receiver</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-
-  <!-- Chromecast CAF Receiver SDK -->
-  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-  <!-- hls.js -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
-
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 100%;
-      height: 100%;
-      background: black;
-      overflow: hidden;
-      font-family: sans-serif;
-    }
-
-    .player {
-      position: fixed;
-      inset: 0;
-      background: black;
-    }
-
-    video {
-      width: 100%;
-      height: 100%;
-      background: black;
-      object-fit: contain;
-    }
-
-    video::-webkit-media-controls {
-      display: none !important;
-    }
-
-    .controls {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-      padding: 20px;
-      background: linear-gradient(to top, rgba(0,0,0,.7), transparent 50%);
-      opacity: 0;
-      transition: .2s ease;
-      pointer-events: none;
-    }
-
-    .player:hover .controls,
-    body.show-controls .controls {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .bar {
-      height: 6px;
-      background: rgba(255,255,255,.25);
-      border-radius: 10px;
-      overflow: hidden;
-      cursor: pointer;
-      margin-bottom: 15px;
-      position: relative;
-    }
-
-    .fill {
-      height: 100%;
-      background: #1e90ff;
-      width: 0%;
-    }
-
-    .buttons {
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-    }
-
-    button, select {
-      background: rgba(0,0,0,.7);
-      border: 1px solid rgba(255,255,255,.2);
-      color: white;
-      padding: 12px 16px;
-      border-radius: 50px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-
-    .right-controls {
-      margin-top: 12px;
-      display: flex;
-      gap: 10px;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-
-    .info {
-      position: absolute;
-      right: 15px;
-      bottom: 15px;
-      padding: 6px 10px;
-      background: rgba(0,0,0,.6);
-      color: #aaa;
-      font-size: 11px;
-      border-radius: 10px;
-      display: flex;
-      gap: 10px;
-    }
-
-    .status {
-      position: absolute;
-      left: 15px;
-      bottom: 15px;
-      padding: 6px 10px;
-      background: rgba(0,0,0,.6);
-      color: #aaa;
-      font-size: 11px;
-      border-radius: 10px;
-    }
-  </style>
-</head>
-<body>
-
-<div class="player">
-  <video id="video" crossorigin="anonymous"></video>
-
-  <div class="controls">
-    <div class="bar" id="bar">
-      <div class="fill" id="fill"></div>
-    </div>
-
-    <div class="buttons">
-      <button id="play">▶</button>
-      <button id="rewind">«10</button>
-      <button id="forward">10»</button>
-      <button id="subs" disabled>Subs</button>
-    </div>
-
-    <div class="right-controls">
-      <select id="quality" disabled>
-        <option value="-1">Auto</option>
-      </select>
-      <button id="mute">🔊</button>
-    </div>
-  </div>
-
-  <div class="info">
-    <span id="res">Resolution: auto</span>
-    <span id="tech">Idle</span>
-  </div>
-
-  <div class="status" id="status">Waiting for cast...</div>
-</div>
-
 <script>
 /* ===============================
    ΒΑΣΙΚΑ ELEMENTS
@@ -173,8 +17,15 @@ const resEl    = document.getElementById("res");
 const techEl   = document.getElementById("tech");
 const statusEl = document.getElementById("status");
 
+// Νέα λίστα με όλα τα controls που θέλουμε να είναι focusable
+const focusableControls = [
+  playBtn, rwBtn, fwBtn, subsBtn, quality, muteBtn
+];
+
 let hls = null;
 let currentSubTrack = null;
+let controlsTimeout; // Για να κρύβουμε τα controls αυτόματα
+const isTV = /TV|BRAVIA|AFT|Android TV/i.test(navigator.userAgent);
 
 /* ===============================
    CAST RECEIVER SETUP
@@ -188,8 +39,8 @@ context.setInactivityTimeout(0);
 /**
  * Καλείται όταν ο sender κάνει LOAD (RemoteMediaClient.load(getMediaInfo()))
  * εδώ παίρνουμε:
- *  - media.contentId  => video URL (από VideoCast)
- *  - media.tracks[]   => subtitles (SubtitlesServerUrl)
+ * - media.contentId  => video URL (από VideoCast)
+ * - media.tracks[]   => subtitles (SubtitlesServerUrl)
  */
 playerManager.setMessageInterceptor(
   cast.framework.messages.MessageType.LOAD,
@@ -360,21 +211,67 @@ function loadPlayer(videoUrl, subUrl, subLang) {
 }
 
 /* ===============================
+   HELPER FUNCTIONS ΓΙΑ CONTROLS
+================================== */
+// Εμφανίζει τα controls και ξεκινάει το timeout για να κρυφτούν
+function showControls(focusElement = null) {
+  clearTimeout(controlsTimeout);
+  document.body.classList.add("show-controls");
+
+  if (focusElement) {
+    focusElement.focus();
+  } else if (!document.activeElement || document.activeElement === document.body) {
+    // Αν δεν υπάρχει focus, εστίασε στο playBtn (το default)
+    playBtn.focus();
+  }
+
+  // Κρύψε μετά από 5 δευτερόλεπτα αν δεν υπάρχει δραστηριότητα
+  controlsTimeout = setTimeout(() => {
+    document.body.classList.remove("show-controls");
+  }, isTV ? 8000 : 3000); // Δώσε περισσότερο χρόνο στην TV
+}
+
+// Κρύβει τα controls άμεσα
+function hideControls() {
+  clearTimeout(controlsTimeout);
+  document.body.classList.remove("show-controls");
+}
+
+
+/* ===============================
    LOCAL CONTROLS (REMOTE + TV)
 ================================== */
-playBtn.onclick = () => video.paused ? video.play() : video.pause();
-rwBtn.onclick   = () => { video.currentTime = Math.max(0, video.currentTime - 10); };
-fwBtn.onclick   = () => { video.currentTime = video.currentTime + 10; };
+// 1. Κάνουμε όλα τα controls focusable
+focusableControls.forEach(el => {
+  el.setAttribute("tabindex", "0");
+  el.addEventListener("focus", () => showControls(el)); // Κρατάμε τα controls ανοιχτά όσο κάτι έχει focus
+});
+
+// 2. Click/Action Handlers
+playBtn.onclick = () => {
+  video.paused ? video.play() : video.pause();
+  showControls(playBtn); // Επανεμφάνιση μετά την αλλαγή
+};
+rwBtn.onclick   = () => {
+  video.currentTime = Math.max(0, video.currentTime - 10);
+  showControls(rwBtn);
+};
+fwBtn.onclick   = () => {
+  video.currentTime = video.currentTime + 10;
+  showControls(fwBtn);
+};
 
 muteBtn.onclick = () => {
   video.muted = !video.muted;
   muteBtn.textContent = video.muted ? "🔇" : "🔊";
+  showControls(muteBtn);
 };
 
 subsBtn.onclick = () => {
   if (!video.textTracks || video.textTracks.length === 0) return;
   const t = video.textTracks[0];
   t.mode = t.mode === "showing" ? "disabled" : "showing";
+  showControls(subsBtn);
 };
 
 quality.onchange = () => {
@@ -385,8 +282,10 @@ quality.onchange = () => {
   } else {
     hls.currentLevel = parseInt(v);
   }
+  showControls(quality);
 };
 
+// 3. Χειρισμός Seek/Progress Bar (ίδιος)
 video.addEventListener("timeupdate", () => {
   if (!video.duration) return;
   fill.style.width = (video.currentTime / video.duration) * 100 + "%";
@@ -398,35 +297,76 @@ bar.onclick = (e) => {
   if (video.duration) {
     video.currentTime = p * video.duration;
   }
+  showControls(); // Εμφάνιση μετά το seek
 };
 
-/* ===============================
-   Android TV / Remote friendly select
-================================== */
-quality.setAttribute("tabindex", "0");
-
-quality.addEventListener("focus", () => {
-  document.body.classList.add("show-controls");
-});
-
+// 4. Android TV/Remote Keydown Logic
 window.addEventListener("keydown", (e) => {
-  const isTV = /TV|BRAVIA|AFT|Android TV/i.test(navigator.userAgent);
-  if (!isTV) return;
+  if (e.defaultPrevented) return;
 
-  if (
-    (e.key === "Enter" || e.key === "OK") &&
-    document.activeElement === quality
-  ) {
-    e.preventDefault();
-    quality.click();
-    quality.size = quality.options.length;
+  const active = document.activeElement;
+
+  if (isTV) {
+    // 1. ΑΝ το video παίζει και πατηθεί Enter/OK (για pause/play)
+    if (
+      (e.key === "Enter" || e.key === "OK" || e.keyCode === 13) &&
+      active === document.body // ΔΕΝ έχει focus κάποιο control
+    ) {
+      e.preventDefault();
+      video.paused ? video.play() : video.pause();
+      // Εμφάνιση των controls για λίγο μετά το Play/Pause
+      showControls();
+      return;
+    }
+
+    // 2. ΑΝ πατηθεί Enter/OK σε επιλεγμένο control, εκτέλεσε την ενέργεια
+    if (
+      (e.key === "Enter" || e.key === "OK" || e.keyCode === 13) &&
+      focusableControls.includes(active)
+    ) {
+      active.click();
+      return;
+    }
+
+    // 3. Άμεση εμφάνιση των controls με οποιοδήποτε πλήκτρο D-pad (πλοήγησης)
+    if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
+      showControls(active);
+      return;
+    }
+
+    // 4. Χειρισμός Back/Escape (για να κρύβουμε τα controls αν είναι ανοιχτά)
+    if (e.key === "Escape" || e.key === "Backspace") {
+      if (document.body.classList.contains("show-controls")) {
+        e.preventDefault();
+        hideControls();
+        document.body.focus(); // Αφαίρεσε focus από όλα τα controls
+        return;
+      }
+    }
   }
 
-  if (e.key === "Escape" || e.key === "Backspace") {
-    quality.size = 0;
+  // 5. Χειρισμός πλήκτρων για Fast Forward/Rewind (αν είναι ενεργό το video)
+  if (e.key === "MediaFastForward" || e.key === "ArrowRight") {
+    if (!document.activeElement || active === document.body) {
+      e.preventDefault();
+      fwBtn.click();
+      showControls(fwBtn);
+    }
+  } else if (e.key === "MediaRewind" || e.key === "ArrowLeft") {
+    if (!document.activeElement || active === document.body) {
+      e.preventDefault();
+      rwBtn.click();
+      showControls(rwBtn);
+    }
   }
 });
-</script>
 
-</body>
-</html>
+// 5. Χειρισμός focus/blur για Desktop (για να κρύβονται όταν χάνουν focus)
+focusableControls.forEach(el => {
+  el.addEventListener("blur", () => {
+    // Κρύψε τα controls μόνο αν ο κέρσορας δεν έχει μετακινηθεί σε άλλο focusable control
+    // Αυτό το χειρίζεται το controlsTimeout μέσα στο showControls
+  });
+});
+
+</script>
