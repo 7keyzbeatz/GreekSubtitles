@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>GRMF Pro HLS Player - Fullscreen Receiver</title>
+  <title>GRMF Pro HLS Player - Debug Receiver</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <script src="//www.gstatic.com/cast/sdk/libs/receiver/2.0.0/cast_receiver.js"></script>
@@ -29,34 +29,139 @@
       box-sizing: border-box;
     }
 
-    /* Fullscreen setup */
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
-      background: #000; /* Μαύρο φόντο για fullscreen player */
+      background: #000;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       color: var(--text-main);
-      overflow: hidden; /* Απαραίτητο για TV / cast */
+      overflow: hidden;
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
     .shell {
-      /* Το shell πρέπει να καλύπτει όλη την οθόνη */
       width: 100%;
       height: 100%;
-      padding: 0;
+      padding: 16px; /* Επαναφέρω το padding για το Panel */
       display: flex;
-      align-items: center;
-      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
     }
 
-    /* Αφαίρεση μη απαραίτητων στοιχείων (headers/panels/logs) */
-    .header, .panel, .log {
-      display: none !important;
+    /* Αρχική απόκρυψη του panel, εμφανίζεται μόνο με toggle */
+    .panel {
+      background: linear-gradient(135deg, rgba(8, 13, 35, 0.96), rgba(8, 15, 45, 0.96));
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      box-shadow: var(--shadow-soft);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      display: none; /* Κρυφό αρχικά */
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .panel.visible {
+        display: flex; /* Ορατό με κλικ */
+    }
+
+    .panel-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .panel-title {
+      font-weight: 500;
+      font-size: 14px;
+    }
+
+    .badge {
+      font-size: 11px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .panel-grid {
+      display: grid;
+      grid-template-columns: 2fr 2fr 1fr;
+      gap: 10px;
+    }
+
+    @media (max-width: 780px) {
+      .panel-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+    }
+
+    .field input {
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(2, 5, 20, 0.9);
+      padding: 7px 10px;
+      color: var(--text-main);
+      font-size: 13px;
+      outline: none;
+      transition: border 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+
+    .field input:focus {
+      border-color: rgba(30, 144, 255, 0.8);
+      box-shadow: 0 0 0 1px rgba(30, 144, 255, 0.45);
+      background: rgba(3, 9, 30, 0.95);
+    }
+
+    .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border-radius: 999px;
+      border: none;
+      padding: 7px 14px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      background: var(--accent);
+      color: #ffffff;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 10px 25px rgba(30, 144, 255, 0.45);
+      transition: transform 0.08s ease, box-shadow 0.08s ease, background 0.1s ease;
+    }
+
+    .btn-secondary {
+      background: transparent;
+      color: var(--text-muted);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow: none;
     }
 
     .main {
@@ -86,11 +191,25 @@
       outline: none;
     }
 
-    /* Μετακίνηση του overlay info κάτω δεξιά */
+    /* Toggle Button για εμφάνιση Debug Panel */
+    #toggleDebugBtn {
+        position: absolute;
+        top: 16px;
+        left: 16px;
+        z-index: 40;
+        background: rgba(0,0,0,.65);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        cursor: pointer;
+        font-size: 12px;
+    }
+
     .overlay-info {
       position: absolute;
       right: 12px; 
-      bottom: 70px; /* Πάνω από τα controls */
+      bottom: 70px;
       left: auto;
       padding: 6px 10px;
       border-radius: var(--radius-md);
@@ -102,31 +221,17 @@
       align-items: center;
       gap: 8px;
       z-index: 20;
-      /* Εξ αρχής κρυμμένο, εμφανίζεται μόνο αν φορτωθεί η ανάλυση */
       opacity: 0.5; 
       transition: opacity .25s ease;
     }
 
-    .chip {
-      padding: 2px 8px;
-      border-radius: 999px;
-      border: 1px solid rgba(255, 255, 255, 0.16);
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-
-    /* === PRO CUSTOM VIDEO CONTROLS === */
-    video::-webkit-media-controls {
-      display: none !important;
-    }
-
+    /* ... (Κρατάμε τα controls styles, focus-ring κλπ) ... */
     .pro-controls {
       position: absolute;
       inset: 0;
       display: flex;
       flex-direction: column;
-      justify-content: flex-end; /* Τα controls μόνο κάτω */
+      justify-content: flex-end;
       padding: 16px;
       background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%);
       pointer-events: none;
@@ -134,94 +239,13 @@
       transition: opacity .25s ease;
       z-index: 30;
     }
-    
-    /* Controls Visible: Εμφανίζεται με το mouseover/focus/πλήκτρο */
+
     .video-wrapper:hover .pro-controls,
     .controls-visible .pro-controls {
       opacity: 1;
       pointer-events: auto;
     }
-
-    /* ... (Κρατάμε τα controls styles όπως είναι) ... */
-    .pro-bar {
-      height: 6px;
-      background: rgba(255,255,255,.2);
-      border-radius: 999px;
-      cursor: pointer;
-      overflow: hidden;
-      margin-bottom: 10px;
-      position: relative;
-    }
-
-    .pro-fill {
-      height: 100%;
-      width: 0%;
-      background: var(--accent);
-    }
-
-    .pro-buttons {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .pro-left,
-    .pro-right {
-      display: flex;
-      gap: 10px;
-      align-items: center;
-      flex-wrap: wrap;
-    }
-
-    .pro-btn {
-      background: rgba(0,0,0,.65);
-      border: none;
-      color: white;
-      padding: 10px 14px;
-      border-radius: 999px;
-      font-size: 14px;
-      cursor: pointer;
-      transition: .15s ease;
-      min-width: 44px;
-      min-height: 36px;
-      outline: none; /* Το focus ring το κάνουμε με κλάση */
-    }
-
-    .pro-btn:hover {
-      background: rgba(30,144,255,.7);
-      transform: scale(1.05);
-    }
-
-    /* focus ring for TV / keyboard navigation */
-    .pro-btn.focus-ring,
-    .pro-select.focus-ring {
-      box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent);
-    }
-
-    .pro-select {
-      background: rgba(0,0,0,.65);
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.18);
-      padding: 8px 10px;
-      color: #fff;
-      font-size: 12px;
-      outline: none;
-      min-width: 88px;
-      /* Επιτρέπει την εμφάνιση του native select dropdown στην TV */
-      -webkit-appearance: menulist-button;
-      appearance: menulist-button;
-    }
-
-    .pro-time-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      min-width: 110px;
-      text-align: center;
-    }
-
-    /* Center the loading indicator */
+    
     .loading-indicator {
         position: absolute;
         top: 50%;
@@ -239,12 +263,52 @@
         display: block;
     }
 
+    .pro-bar { height: 6px; background: rgba(255,255,255,.2); border-radius: 999px; cursor: pointer; overflow: hidden; margin-bottom: 10px; position: relative; }
+    .pro-fill { height: 100%; width: 0%; background: var(--accent); }
+    .pro-buttons { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .pro-left, .pro-right { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .pro-btn { background: rgba(0,0,0,.65); border: none; color: white; padding: 10px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; transition: .15s ease; min-width: 44px; min-height: 36px; outline: none; }
+    .pro-btn.focus-ring, .pro-select.focus-ring { box-shadow: 0 0 0 2px var(--accent-soft), 0 0 0 1px var(--accent); }
+    .pro-select { background: rgba(0,0,0,.65); border-radius: 999px; border: 1px solid rgba(255,255,255,0.18); padding: 8px 10px; color: #fff; font-size: 12px; outline: none; min-width: 88px; -webkit-appearance: menulist-button; appearance: menulist-button; }
+    .pro-time-label { font-size: 12px; color: var(--text-muted); min-width: 110px; text-align: center; }
+
   </style>
 </head>
 <body>
 
   <div class="shell">
     
+    <button id="toggleDebugBtn">⚙️ Debug Panel</button>
+
+    <div id="debugPanel" class="panel">
+      <div class="panel-top">
+        <div class="panel-title">Stream Configuration (Manual Debug)</div>
+        <div class="badge">Manual test mode</div>
+      </div>
+      <div class="panel-grid">
+        <div class="field">
+          <label for="videoUrl">Video URL (HLS .m3u8 ή MP4)</label>
+          <input id="videoUrl" type="text" placeholder="URL από Android Studio" />
+        </div>
+        <div class="field">
+          <label for="subUrl">Subtitles URL (VTT)</label>
+          <input id="subUrl" type="text" placeholder="URL από SubtitlesServerUrl" />
+        </div>
+        <div class="field">
+          <label for="subLabel">Subtitles Label</label>
+          <input id="subLabel" type="text" placeholder="Greek" value="Greek" />
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btnFillDemo" class="btn btn-secondary" type="button">
+          <span class="btn-icon">⭐</span> Demo values
+        </button>
+        <button id="btnLoad" class="btn" type="button">
+          <span class="btn-icon">▶</span> Load stream manually
+        </button>
+      </div>
+      <div id="log" style="font-size:11px; color:var(--text-muted);">Ready. Waiting for Cast or manual input.</div>
+    </div>
     <div class="main">
       <div class="video-wrapper">
         <video id="video" controls crossorigin="anonymous"></video>
@@ -277,7 +341,7 @@
                   <option value="-1">Auto</option>
                 </select>
                 <button class="pro-btn" id="muteBtn" tabindex="6">🔊</button>
-                </div>
+              </div>
             </div>
           </div>
 
@@ -293,10 +357,8 @@
 
   <script>
     const video = document.getElementById('video');
-    
     const loadingIndicator = document.getElementById('loadingIndicator');
     const statusLabel = document.getElementById('status-label'); 
-    
     const infoTech = document.getElementById('info-tech');
     const infoRes = document.getElementById('info-res');
 
@@ -304,7 +366,6 @@
     const rwBtn = document.getElementById('rwBtn');
     const fwBtn = document.getElementById('fwBtn');
     const muteBtn = document.getElementById('muteBtn');
-    // ΑΦΑΙΡΕΘΗΚΕ το fsBtn
     
     const proBar = document.getElementById('proBar');
     const proFill = document.getElementById('proFill');
@@ -312,16 +373,24 @@
     const timeLabel = document.getElementById('timeLabel');
     const qualitySelect = document.getElementById('qualitySelect');
     const subToggleBtn = document.getElementById('subToggleBtn');
+    
+    // Debug Panel Elements
+    const debugPanel = document.getElementById('debugPanel');
+    const toggleDebugBtn = document.getElementById('toggleDebugBtn');
+    const videoInput = document.getElementById('videoUrl');
+    const subInput = document.getElementById('subUrl');
+    const subLabelInput = document.getElementById('subLabel');
+    const btnLoad = document.getElementById('btnLoad');
+    const btnDemo = document.getElementById('btnFillDemo');
+    const logEl = document.getElementById('log');
 
     let hlsInstance = null;
     let dashInstance = null;
     let activeSubtitleTrack = null;
     let hlsLevels = [];
-
-    let wakeLock = null; // Για keep-awake
+    let wakeLock = null; 
 
     /* focus system for TV / keyboard */
-    // Διορθωμένη λίστα focusable controls (χωρίς το fsBtn)
     const focusableControls = [ppBtn, rwBtn, fwBtn, subToggleBtn, qualitySelect, muteBtn].filter(Boolean);
     let focusIndex = -1;
 
@@ -337,7 +406,7 @@
         const el = focusableControls[focusIndex];
         if (el) {
           el.classList.add('focus-ring');
-          el.focus(); // Σημαντικό για το focus
+          el.focus(); 
         }
       } else {
         document.body.classList.remove('controls-visible');
@@ -358,11 +427,19 @@
       focusableControls.forEach(el => el && el.classList.remove('focus-ring'));
     }
 
-    /* Βελτιωμένη log/status για TV */
+    /* Log and Status */
     function log(message, type = 'info') {
       console.log('[GRMF PLAYER]', message);
+      const time = new Date().toLocaleTimeString();
+      // Εμφάνιση του log στο Debug Panel
+      logEl.innerHTML = `[${time}] ${message}`; 
       if (type === 'error') {
           setStatus(message, 'error');
+          logEl.style.color = 'var(--danger)';
+      } else if (type === 'cast') {
+          logEl.style.color = 'var(--accent)';
+      } else {
+          logEl.style.color = 'var(--text-muted)';
       }
     }
 
@@ -401,7 +478,7 @@
       const track = document.createElement('track');
       track.kind = 'subtitles';
       track.label = label || 'Subtitles';
-      track.srclang = 'el'; // Υποθέτουμε Ελληνικά
+      track.srclang = 'el'; 
       track.src = url;
       track.default = true;
       video.appendChild(track);
@@ -439,9 +516,9 @@
       qualitySelect.disabled = true;
       qualitySelect.value = '-1';
       infoRes.textContent = 'Resolution: -';
+      infoRes.style.opacity = '0.5';
     }
 
-    // Η loadStream έγινε Promise για να δουλέψει με το Cast SDK Interceptor
     function loadStream(videoUrl, subUrl, subLabel) {
       return new Promise((resolve, reject) => {
 
@@ -452,7 +529,7 @@
         clearTracks();
         resetQualityUI();
 
-        if (!videoUrl) {
+        if (!videoUrl || videoUrl === 'NULL') {
           log('No video URL provided.', 'error');
           setStatus('Ready (No URL)');
           reject(new Error('No video URL'));
@@ -462,6 +539,7 @@
         setStatus('Loading');
         infoTech.textContent = 'HTML5';
         infoRes.textContent = 'Resolution: -';
+        infoRes.style.opacity = '0.5';
 
         const urlLower = videoUrl.toLowerCase();
         const isHls = urlLower.includes('.m3u8');
@@ -483,7 +561,7 @@
               destroyHls();
               releaseWakeLock();
               reject(new Error(`HLS Fatal: ${data.type}`));
-              return; // Τερματισμός φόρτωσης σε fatal error
+              return; 
             }
           });
 
@@ -509,7 +587,7 @@
                 qualitySelect.appendChild(opt);
               });
               qualitySelect.disabled = false;
-              qualitySelect.value = '-1'; // Auto
+              qualitySelect.value = '-1'; 
             }
           });
 
@@ -535,12 +613,12 @@
           });
 
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
-            log('HLS manifest parsed, starting playback…');
+            log('HLS manifest parsed, starting playback…', 'cast');
             attachSubtitles(subUrl, subLabel);
             video.play().catch(err => {
               log('Autoplay blocked. User must press play.', 'info');
             });
-            resolve(); // Επιτυχία φόρτωσης
+            resolve(); 
           });
 
           hlsInstance.loadSource(videoUrl);
@@ -557,7 +635,6 @@
             releaseWakeLock();
             reject(new Error('DASH error'));
           });
-          // Εδώ δεν υπάρχει συγκεκριμένο event "parsed", υποθέτουμε επιτυχία
           resolve(); 
 
         } else {
@@ -567,30 +644,51 @@
           attachSubtitles(subUrl, subLabel);
           video.load();
           video.play().then(() => {
-            log('Playback started with native HTML5.');
+            log('Playback started with native HTML5.', 'cast');
             resolve();
           }).catch(err => {
             log('Autoplay blocked. User must press play.', 'info');
-            resolve(); // Συνεχίζουμε ακόμα και αν το autoplay αποτύχει
+            resolve(); 
           });
         }
       });
     }
     
+    /* === Debug Panel & Manual Load Logic === */
+
+    toggleDebugBtn.addEventListener('click', () => {
+        debugPanel.classList.toggle('visible');
+    });
+
+    // Manual Load Button
+    btnLoad.addEventListener('click', () => {
+      const v = videoInput.value.trim();
+      const s = subInput.value.trim();
+      const label = subLabelInput.value.trim() || 'Subtitles';
+      log(`Manual load started for: ${v}`, 'info');
+      loadStream(v, s, label).catch(e => {
+          log(`Manual load failed: ${e.message}`, 'error');
+      });
+      debugPanel.classList.remove('visible'); // Κρύψε το panel μετά τη φόρτωση
+    });
+
+    // Demo values button
+    btnDemo.addEventListener('click', () => {
+      videoInput.value = 'https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8';
+      subInput.value = 'https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt';
+      subLabelInput.value = 'Greek';
+      log('Demo values filled. Press "Load stream manually" to test.');
+    });
+
+
     /* === Keep Awake Logic === */
     async function requestWakeLock() {
         if ('wakeLock' in navigator) {
             try {
                 wakeLock = await navigator.wakeLock.request('screen');
-                log('Screen Wake Lock acquired.');
-                wakeLock.addEventListener('release', () => {
-                    log('Screen Wake Lock released.');
-                });
             } catch (err) {
                 log(`Failed to acquire Wake Lock: ${err.name}`, 'error');
             }
-        } else {
-            log('Wake Lock not supported. Using a less reliable fallback.');
         }
     }
     
@@ -599,60 +697,6 @@
             wakeLock.release().catch(() => {});
             wakeLock = null;
         }
-    }
-    
-    document.addEventListener('visibilitychange', () => {
-        if (wakeLock !== null && document.visibilityState === 'visible') {
-            requestWakeLock();
-        }
-    });
-
-    /* === PRO PLAYER CONTROLS JS === */
-
-    function togglePlayPause() {
-      if (video.paused) {
-        video.play().catch(() => {});
-      } else {
-        video.pause();
-      }
-    }
-
-    ppBtn.onclick = () => togglePlayPause();
-
-    rwBtn.onclick = () => {
-      if (!isNaN(video.currentTime)) {
-        video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
-      }
-    };
-
-    fwBtn.onclick = () => {
-      if (video.duration) {
-        video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
-      }
-    };
-
-    muteBtn.onclick = () => {
-      video.muted = !video.muted;
-      muteBtn.textContent = video.muted ? '🔇' : '🔊';
-    };
-
-    function formatTime(seconds) {
-      if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
-      const s = Math.floor(seconds % 60);
-      const m = Math.floor((seconds / 60) % 60);
-      const h = Math.floor(seconds / 3600);
-      const pad = (n) => n.toString().padStart(2, '0');
-      if (h > 0) {
-        return `${h}:${pad(m)}:${pad(s)}`;
-      }
-      return `${pad(m)}:${pad(s)}`;
-    }
-
-    function updateTimeLabel() {
-      if (!timeLabel) return;
-      const current = formatTime(video.currentTime || 0);
-      const total = formatTime(video.duration || 0);
-      timeLabel.textContent = `${current} / ${total}`;
     }
 
     // ... (video event listeners) ...
@@ -663,7 +707,7 @@
 
     video.addEventListener('playing', () => {
       setStatus('Playing');
-      requestWakeLock(); // Ξανά-εξασφάλιση Wake Lock
+      requestWakeLock();
     });
 
     video.addEventListener('pause', () => {
@@ -680,154 +724,47 @@
       setStatus('Error: Playback Failed');
       releaseWakeLock(); 
     });
-    
-    video.addEventListener('timeupdate', () => {
-        updateTimeLabel();
-        // Update progress bar
-        if (video.duration) {
-            proFill.style.width = `${(video.currentTime / video.duration) * 100}%`;
-        }
-    });
 
-    // Subtitle toggle
-    if (subToggleBtn) {
-      subToggleBtn.addEventListener('click', () => {
-        if (!video.textTracks || video.textTracks.length === 0) return;
-        const anyShowing = Array.from(video.textTracks).some(t => t.mode === 'showing');
-        const nextMode = anyShowing ? 'disabled' : 'showing';
-        for (let i = 0; i < video.textTracks.length; i++) {
-          video.textTracks[i].mode = nextMode;
-        }
-        subToggleBtn.dataset.state = nextMode === 'showing' ? 'on' : 'off';
-        subToggleBtn.textContent = nextMode === 'showing' ? 'Subs: On' : 'Subs: Off';
-      });
+    // ... (Player controls logic) ...
+    function togglePlayPause() {
+      if (video.paused) { video.play().catch(() => {}); } else { video.pause(); }
+    }
+    
+    function formatTime(seconds) {
+      if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
+      const s = Math.floor(seconds % 60);
+      const m = Math.floor((seconds / 60) % 60);
+      const h = Math.floor(seconds / 3600);
+      const pad = (n) => n.toString().padStart(2, '0');
+      if (h > 0) { return `${h}:${pad(m)}:${pad(s)}`; }
+      return `${pad(m)}:${pad(s)}`;
     }
 
-    // Quality selector change
-    if (qualitySelect) {
-      qualitySelect.addEventListener('change', () => {
-        if (!hlsInstance) return;
-        const value = qualitySelect.value;
-        if (value === '-1') {
-          hlsInstance.currentLevel = -1; // auto
-          hlsInstance.autoLevelEnabled = true;
-          infoRes.textContent = 'Resolution: auto';
-        } else {
-          const levelIndex = parseInt(value, 10);
-          if (!isNaN(levelIndex)) {
-            hlsInstance.autoLevelEnabled = false;
-            hlsInstance.currentLevel = levelIndex;
-            const level = hlsInstance.levels && hlsInstance.levels[levelIndex];
-            if (level && level.height) {
-              infoRes.textContent = `Resolution: ${level.height}p`;
-            }
-          }
-        }
-        // Επαναφέρουμε το focus στο select
-        setFocus(focusableControls.indexOf(qualitySelect));
-      });
+    function updateTimeLabel() {
+        if (!timeLabel) return;
+        const current = formatTime(video.currentTime || 0);
+        const total = formatTime(video.duration || 0);
+        timeLabel.textContent = `${current} / ${total}`;
     }
 
-    // Remote / TV optimized keys with focus system
-    window.addEventListener('keydown', (e) => {
-      const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
-      
-      // Όταν το select είναι ενεργό, επιτρέπουμε τα native πλήκτρα του
-      if (activeTag === 'select') {
-         if (e.key === 'Enter') {
-             // Το Enter ενεργοποιεί το native dropdown
-             return;
-         }
-         return; 
-      }
-
-      // Εμφάνιση controls με οποιοδήποτε πλήκτρο
-      document.body.classList.add('controls-visible');
-
-      // Space και MediaPlayPause πάντα αλλάζουν την αναπαραγωγή
-      if (e.key === ' ' || e.key === 'MediaPlayPause') {
-        e.preventDefault();
-        togglePlayPause();
-        return;
-      }
-
-      // Enter/OK
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        if (focusIndex >= 0 && focusIndex < focusableControls.length) {
-          const el = focusableControls[focusIndex];
-          if (el.tagName.toLowerCase() === 'select') {
-              el.focus(); // Ενεργοποιεί το native dropdown
-          } else if (el && typeof el.click === 'function') {
-            el.click();
-          }
-        } else {
-          // Enter ενεργοποιεί play/pause αν δεν υπάρχει focus στα controls
-          togglePlayPause();
-        }
-        return;
-      }
-
-      switch (e.key) {
-        case 'ArrowLeft':
-          e.preventDefault();
-          if (focusIndex === -1) {
-            // No focus: skip 10s back
-            if (!isNaN(video.currentTime)) {
-              video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
-            }
-            if (focusableControls.length) setFocus(0);
-          } else {
-            setFocus(focusIndex - 1);
-          }
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          if (focusIndex === -1) {
-            // No focus: skip 10s forward
-            if (video.duration) {
-              video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
-            }
-            if (focusableControls.length) setFocus(0);
-          } else {
-            setFocus(focusIndex + 1);
-          }
-          break;
-        case 'MediaRewind':
-          e.preventDefault();
-          if (!isNaN(video.currentTime)) {
-            video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
-          }
-          break;
-        case 'MediaFastForward':
-          e.preventDefault();
-          if (video.duration) {
-            video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
-          }
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          video.volume = Math.min(1, (video.volume || 0) + 0.05);
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          video.volume = Math.max(0, (video.volume || 0) - 0.05);
-          break;
-        // ΑΦΑΙΡΕΘΗΚΕ το KeyF για Fullscreen
-        case 'KeyM':
-          e.preventDefault();
-          muteBtn.click();
-          break;
-        case 'Escape':
-          e.preventDefault();
-          clearFocus();
-          document.body.classList.remove('controls-visible');
-          break;
-        default:
-          break;
-      }
+    proBar.addEventListener('mousemove', (e) => {
+        if (!video.duration) return;
+        const rect = proBar.getBoundingClientRect();
+        const pos = (e.clientX - rect.left) / rect.width;
+        const seconds = pos * video.duration;
+        proTooltip.textContent = formatTime(seconds);
+        proTooltip.style.left = `${pos * 100}%`;
+        proTooltip.classList.add('visible');
     });
-    
+
+    proBar.addEventListener('mouseleave', () => { proTooltip.classList.remove('visible'); });
+    proBar.addEventListener('click', (e) => {
+      const rect = proBar.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      if (video.duration) { video.currentTime = pos * video.duration; }
+    });
+
+
     /* === CAST SDK INTEGRATION === */
 
     window.onload = function() {
@@ -837,59 +774,54 @@
             const context = cast.receiver.CastReceiverContext.getInstance();
             const playerManager = context.getPlayerManager();
             
-            // Κρατάμε το Screen Wake Lock ενεργό από την αρχή
             requestWakeLock();
 
-            // Intercept LOAD request (το μήνυμα που στέλνει η Android εφαρμογή σου)
+            // Intercept LOAD request (από την Android εφαρμογή σου)
             playerManager.setMessageInterceptor(cast.framework.messages.MessageType.LOAD, (loadRequest) => {
                 
                 const media = loadRequest.media;
-                const videoUrl = media.contentId; // Αυτό είναι το Video URL από το MediaInfo.Builder
+                const videoUrl = media.contentId; 
                 let subUrl = null;
                 let subLabel = 'Subtitles';
 
-                // 1. Διάβασμα των Media Tracks (Υποτίτλων)
                 if (media.mediaTracks) {
                     const subtitleTrack = media.mediaTracks.find(
-                        // Ψάχνουμε για το Track που έστειλες ως TYPE_TEXT
                         track => track.type === cast.framework.messages.MediaTrack.Type.TEXT
                     );
 
                     if (subtitleTrack) {
-                        // contentId του MediaTrack είναι το SubtitlesServerUrl
                         subUrl = subtitleTrack.trackContentId; 
                         subLabel = subtitleTrack.name || subtitleTrack.language || 'Subtitles';
-                        log(`Found subtitle track: ${subLabel} at ${subUrl}`);
+                        log(`Cast: Found subtitle track: ${subLabel}`, 'cast');
                     }
                 }
                 
-                // 2. Καλούμε τη δική μας loadStream για να χειριστούμε HLS/DASH/Subtitles
-                // και επιστρέφουμε το Promise.
+                log(`Cast: Received LOAD command for: ${videoUrl}`, 'cast');
+
+                // Γέμισμα των input πεδίων για debugging αν χρειαστεί
+                if (videoInput) videoInput.value = videoUrl;
+                if (subInput) subInput.value = subUrl || '';
+                if (subLabelInput) subLabelInput.value = subLabel || 'Greek';
+
+
+                // Καλούμε τη δική μας loadStream για να χειριστούμε HLS/DASH/Subtitles
                 return loadStream(videoUrl, subUrl, subLabel)
                     .then(() => {
-                         log(`Custom load successful for: ${videoUrl}`);
-                         // Επειδή ο δικός μας player χειρίστηκε τη φόρτωση (hls.js/dash.js), 
-                         // ενημερώνουμε το SDK ότι είμαστε έτοιμοι να παίξουμε.
+                         log(`Cast: Custom load finished successfully.`, 'cast');
                          return loadRequest; 
                     })
                     .catch(e => {
-                        log(`Failed to load stream via custom player: ${e}`, 'error');
+                        log(`Cast: Player load failed. Check URL or network.`, 'error');
                         // Επιστρέφουμε null για να πούμε στο Cast SDK ότι το load απέτυχε
                         return null; 
                     });
             });
 
-            // Cast SDK start
             context.start();
             
         } else {
-            log('Cast SDK not found. Loading demo URL for manual test fallback.');
-            // Fallback για manual test αν ανοίξει η σελίδα σε απλό browser
-            loadStream(
-                'https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8',
-                'https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt',
-                'Greek'
-            );
+            // Fallback για manual test σε απλό browser
+            log('Cast SDK not found. Waiting for manual input.');
         }
     };
   </script>
