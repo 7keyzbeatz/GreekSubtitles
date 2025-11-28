@@ -1,7 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8">
+  <title>GRMF Cast Receiver</title>
   <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+
   <style>
     html, body {
       margin: 0;
@@ -23,28 +26,39 @@
 <iframe id="playerFrame" src="player.html"></iframe>
 
 <script>
-  const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
-  const frame = document.getElementById('playerFrame');
+const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
+const frame = document.getElementById('playerFrame');
 
-  const context = cast.framework.CastReceiverContext.getInstance();
+const context = cast.framework.CastReceiverContext.getInstance();
 
-  context.addCustomMessageListener(NAMESPACE, (event) => {
-    try {
-      const data = typeof event.data === 'string'
-        ? JSON.parse(event.data)
-        : event.data;
+// Receive messages from Android
+context.addCustomMessageListener(NAMESPACE, (event) => {
+  try {
+    const data = typeof event.data === 'string'
+      ? JSON.parse(event.data)
+      : event.data;
 
-      // Στείλ'τα στο player
-      frame.contentWindow.postMessage({
-        type: 'LOAD_STREAM',
-        url: data.url,
-        subUrl: data.subUrl
-      }, '*');
+    frame.contentWindow.postMessage({
+      type: 'LOAD_STREAM',
+      url: data.url,
+      subUrl: data.subUrl,
+      subLabel: data.subLabel
+    }, '*');
 
-    } catch (e) {}
-  });
+  } catch (e) {}
+});
 
-  context.start();
+// Forward remote keys to player.html
+document.addEventListener('keydown', (e) => {
+  frame.contentWindow.postMessage({
+    type: 'REMOTE_KEY',
+    key: e.key
+  }, '*');
+});
+
+// Never sleep
+context.setInactivityTimeout(0);
+context.start();
 </script>
 
 </body>
