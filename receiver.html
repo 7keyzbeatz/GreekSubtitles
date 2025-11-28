@@ -2,82 +2,46 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>GRMF Cast Receiver</title>
+  <title>GRMF Auto Receiver</title>
   <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
   <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      background: black;
-      overflow: hidden;
+    html,body{
+      margin:0;
+      padding:0;
+      width:100%;
+      height:100%;
+      background:black;
+      overflow:hidden;
     }
-    iframe {
-      border: 0;
-      width: 100%;
-      height: 100%;
+    iframe{
+      border:0;
+      width:100%;
+      height:100%;
     }
   </style>
 </head>
 <body>
 
-<iframe id="playerFrame" src="player.html"></iframe>
+<iframe id="frame"></iframe>
 
 <script>
-const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
-const frame = document.getElementById('playerFrame');
 const context = cast.framework.CastReceiverContext.getInstance();
-
-// Receive messages from Android
-context.addCustomMessageListener(NAMESPACE, (event) => {
-  try {
-    const data = typeof event.data === 'string'
-      ? JSON.parse(event.data)
-      : event.data;
-
-    frame.contentWindow.postMessage({
-      type: 'LOAD_STREAM',
-      url: data.url,
-      subUrl: data.subUrl,
-      subLabel: data.subLabel
-    }, '*');
-
-  } catch (e) {}
-});
-
-// Better remote key forwarding (key + keyCode)
-document.addEventListener('keydown', (e) => {
-
-  let key = e.key;
-
-  // Map keyCodes (for TV remotes)
-  switch (e.keyCode) {
-    case 415: key = 'MediaPlayPause'; break;
-    case 413: key = 'MediaPlay'; break;
-    case 19:  key = 'MediaPause'; break;
-
-    case 166:
-    case 427:
-    case 425: key = 'MediaNextTrack'; break;
-
-    case 167:
-    case 428:
-    case 424: key = 'MediaPreviousTrack'; break;
-
-    case 33: key = 'ChannelUp'; break;
-    case 34: key = 'ChannelDown'; break;
-  }
-
-  frame.contentWindow.postMessage({
-    type: 'REMOTE_KEY',
-    key: key
-  }, '*');
-});
-
-// Never sleep
 context.setInactivityTimeout(0);
+
+const iframe = document.getElementById("frame");
+
+// ✅ AUTO LOAD PAGE
+iframe.src = "https://moviesapi.club/movie/385687";
+
+// Optional: force play if page has <video>
+iframe.onload = () => {
+  try {
+    iframe.contentWindow.postMessage({ type: "AUTOPLAY" }, "*");
+  } catch (e) {}
+};
+
+// Start receiver
 context.start();
 </script>
 
