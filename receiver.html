@@ -304,72 +304,123 @@
       color: var(--danger);
     }
 
-/* === PRO CUSTOM VIDEO CONTROLS === */
-video::-webkit-media-controls {
-  display: none !important;
-}
+    /* === PRO CUSTOM VIDEO CONTROLS === */
+    video::-webkit-media-controls {
+      display: none !important;
+    }
 
-.pro-controls {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 16px;
-  background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%);
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity .25s ease;
-}
+    .pro-controls {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px;
+      background: linear-gradient(to top, rgba(0,0,0,.65), transparent 55%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .25s ease;
+    }
 
-.video-wrapper:hover .pro-controls {
-  opacity: 1;
-  pointer-events: auto;
-}
+    .video-wrapper:hover .pro-controls {
+      opacity: 1;
+      pointer-events: auto;
+    }
 
-.pro-bar {
-  height: 6px;
-  background: rgba(255,255,255,.2);
-  border-radius: 999px;
-  cursor: pointer;
-  overflow: hidden;
-  margin-bottom: 10px;
-}
+    .pro-bar {
+      height: 6px;
+      background: rgba(255,255,255,.2);
+      border-radius: 999px;
+      cursor: pointer;
+      overflow: hidden;
+      margin-bottom: 10px;
+      position: relative;
+    }
 
-.pro-fill {
-  height: 100%;
-  width: 0%;
-  background: var(--accent);
-}
+    .pro-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+    }
 
-.pro-buttons {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
+    .pro-buttons {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
 
-.pro-left,
-.pro-right {
-  display: flex;
-  gap: 10px;
-}
+    .pro-left,
+    .pro-right {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
 
-.pro-btn {
-  background: rgba(0,0,0,.65);
-  border: none;
-  color: white;
-  padding: 10px 14px;
-  border-radius: 999px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: .15s ease;
-}
+    .pro-btn {
+      background: rgba(0,0,0,.65);
+      border: none;
+      color: white;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: .15s ease;
+      min-width: 44px;
+      min-height: 36px;
+    }
 
-.pro-btn:hover {
-  background: rgba(30,144,255,.7);
-  transform: scale(1.05);
-}
-    
+    .pro-btn:hover {
+      background: rgba(30,144,255,.7);
+      transform: scale(1.05);
+    }
+
+    /* Netflix-style tooltip πάνω από το seek bar */
+    .pro-tooltip {
+      position: absolute;
+      bottom: 110%;
+      left: 0;
+      transform: translateX(-50%);
+      padding: 3px 6px;
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.85);
+      font-size: 10px;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.12s ease;
+    }
+
+    .pro-tooltip.visible {
+      opacity: 1;
+    }
+
+    /* Quality select + time label */
+    .pro-select {
+      background: rgba(0,0,0,.65);
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      padding: 8px 10px;
+      color: #fff;
+      font-size: 12px;
+      outline: none;
+      min-width: 88px;
+    }
+
+    .pro-time-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      min-width: 110px;
+      text-align: center;
+    }
+
+    @media (max-width: 600px) {
+      .pro-time-label {
+        display: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -424,28 +475,38 @@ video::-webkit-media-controls {
         <video id="video" controls crossorigin="anonymous"></video>
         <div class="pro-controls">
 
-  <div></div>
+          <div></div>
 
-  <div>
-    <div class="pro-bar" id="proBar">
-      <div class="pro-fill" id="proFill"></div>
-    </div>
+          <div>
+            <div class="pro-bar" id="proBar">
+              <div class="pro-fill" id="proFill"></div>
+              <!-- Netflix-style tooltip -->
+              <div class="pro-tooltip" id="proTooltip">00:00</div>
+            </div>
 
-    <div class="pro-buttons">
-      <div class="pro-left">
-        <button class="pro-btn" id="ppBtn">▶</button>
-        <button class="pro-btn" id="rwBtn">«10</button>
-        <button class="pro-btn" id="fwBtn">10»</button>
-      </div>
+            <div class="pro-buttons">
+              <div class="pro-left">
+                <button class="pro-btn" id="ppBtn">▶</button>
+                <button class="pro-btn" id="rwBtn">«10</button>
+                <button class="pro-btn" id="fwBtn">10»</button>
+                <!-- Subtitle toggle -->
+                <button class="pro-btn" id="subToggleBtn" disabled>Subs: Off</button>
+              </div>
 
-      <div class="pro-right">
-        <button class="pro-btn" id="muteBtn">🔊</button>
-        <button class="pro-btn" id="fsBtn">⛶</button>
-      </div>
-    </div>
-  </div>
+              <div class="pro-right">
+                <!-- Time label -->
+                <div class="pro-time-label" id="timeLabel">00:00 / 00:00</div>
+                <!-- Quality selector -->
+                <select class="pro-select" id="qualitySelect" disabled>
+                  <option value="-1">Auto</option>
+                </select>
+                <button class="pro-btn" id="muteBtn">🔊</button>
+                <button class="pro-btn" id="fsBtn">⛶</button>
+              </div>
+            </div>
+          </div>
 
-</div>
+        </div>
 
         <div class="overlay-info">
           <span id="info-res">Resolution: auto</span>
@@ -465,8 +526,22 @@ video::-webkit-media-controls {
     const logEl = document.getElementById('log');
     const statusLabel = document.getElementById('status-label');
     const infoTech = document.getElementById('info-tech');
+    const infoRes = document.getElementById('info-res');
+
+    const ppBtn = document.getElementById('ppBtn');
+    const rwBtn = document.getElementById('rwBtn');
+    const fwBtn = document.getElementById('fwBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const fsBtn = document.getElementById('fsBtn');
+    const proBar = document.getElementById('proBar');
+    const proFill = document.getElementById('proFill');
+    const proTooltip = document.getElementById('proTooltip');
+    const timeLabel = document.getElementById('timeLabel');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const subToggleBtn = document.getElementById('subToggleBtn');
 
     let hlsInstance = null;
+    let activeSubtitleTrack = null;
 
     function log(message, type = 'info') {
       if (type === 'error') {
@@ -486,10 +561,18 @@ video::-webkit-media-controls {
     function clearTracks() {
       const tracks = video.querySelectorAll('track');
       tracks.forEach(t => t.remove());
+      activeSubtitleTrack = null;
+      if (subToggleBtn) {
+        subToggleBtn.disabled = true;
+        subToggleBtn.textContent = 'Subs: Off';
+      }
     }
 
     function attachSubtitles(url, label) {
-      if (!url) return;
+      if (!url) {
+        clearTracks();
+        return;
+      }
       clearTracks();
 
       const track = document.createElement('track');
@@ -499,6 +582,18 @@ video::-webkit-media-controls {
       track.src = url;
       track.default = true;
       video.appendChild(track);
+
+      activeSubtitleTrack = track;
+      // ensure visible by default
+      const textTracks = video.textTracks;
+      for (let i = 0; i < textTracks.length; i++) {
+        textTracks[i].mode = (textTracks[i].label === track.label) ? 'showing' : 'disabled';
+      }
+      if (subToggleBtn) {
+        subToggleBtn.disabled = false;
+        subToggleBtn.dataset.state = 'on';
+        subToggleBtn.textContent = 'Subs: On';
+      }
     }
 
     function destroyHls() {
@@ -508,9 +603,18 @@ video::-webkit-media-controls {
       }
     }
 
+    function resetQualityUI() {
+      if (!qualitySelect) return;
+      qualitySelect.innerHTML = '<option value="-1">Auto</option>';
+      qualitySelect.disabled = true;
+      qualitySelect.value = '-1';
+      infoRes.textContent = 'Resolution: auto';
+    }
+
     async function loadStream(videoUrl, subUrl, subLabel) {
       destroyHls();
       clearTracks();
+      resetQualityUI();
 
       if (!videoUrl) {
         log('No video URL provided.', 'error');
@@ -552,10 +656,42 @@ video::-webkit-media-controls {
 
         hlsInstance.on(Hls.Events.MANIFEST_LOADED, function (event, data) {
           log(`Manifest loaded. Found ${data.levels.length} quality levels.`);
+          // Populate quality selector
+          if (qualitySelect && data.levels && data.levels.length > 0) {
+            resetQualityUI();
+            data.levels.forEach((level, index) => {
+              const opt = document.createElement('option');
+              const height = level.height || 0;
+              const bitrate = level.bitrate || 0;
+              const label = height
+                ? `${height}p`
+                : `${Math.round(bitrate / 1000)} kbps`;
+              opt.value = index.toString();
+              opt.textContent = label;
+              qualitySelect.appendChild(opt);
+            });
+            qualitySelect.disabled = false;
+            qualitySelect.value = '-1'; // Auto
+          }
         });
 
-        hlsInstance.loadSource(videoUrl);
-        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.LEVEL_SWITCHED, function (event, data) {
+          if (!hlsInstance || !hlsInstance.levels) return;
+          const level = hlsInstance.levels[data.level];
+          if (level && level.height) {
+            infoRes.textContent = `Resolution: ${level.height}p`;
+          } else {
+            infoRes.textContent = 'Resolution: auto';
+          }
+          if (qualitySelect && !isNaN(data.level)) {
+            // if manual override not in auto, reflect
+            if (hlsInstance.autoLevelEnabled) {
+              qualitySelect.value = '-1';
+            } else {
+              qualitySelect.value = data.level.toString();
+            }
+          }
+        });
 
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
           log('HLS manifest parsed, starting playback…');
@@ -564,6 +700,9 @@ video::-webkit-media-controls {
             log('Autoplay blocked, user must press play.', 'error');
           });
         });
+
+        hlsInstance.loadSource(videoUrl);
+        hlsInstance.attachMedia(video);
 
       } else {
         // είτε native HLS (Safari) είτε απλό MP4
@@ -596,6 +735,7 @@ video::-webkit-media-controls {
     // Basic video event listeners
     video.addEventListener('loadedmetadata', () => {
       setStatus('Ready');
+      updateTimeLabel();
     });
 
     video.addEventListener('playing', () => {
@@ -615,48 +755,164 @@ video::-webkit-media-controls {
       log('Video error: ' + (err ? err.code : 'unknown'), 'error');
       setStatus('Error');
     });
+
     /* === PRO PLAYER CONTROLS JS === */
 
-const ppBtn = document.getElementById('ppBtn');
-const rwBtn = document.getElementById('rwBtn');
-const fwBtn = document.getElementById('fwBtn');
-const muteBtn = document.getElementById('muteBtn');
-const fsBtn = document.getElementById('fsBtn');
-const proBar = document.getElementById('proBar');
-const proFill = document.getElementById('proFill');
+    ppBtn.onclick = () => video.paused ? video.play() : video.pause();
+    rwBtn.onclick = () => video.currentTime -= 10;
+    fwBtn.onclick = () => video.currentTime += 10;
+    muteBtn.onclick = () => {
+      video.muted = !video.muted;
+      muteBtn.textContent = video.muted ? '🔇' : '🔊';
+    };
 
-ppBtn.onclick = () => video.paused ? video.play() : video.pause();
-rwBtn.onclick = () => video.currentTime -= 10;
-fwBtn.onclick = () => video.currentTime += 10;
-muteBtn.onclick = () => video.muted = !video.muted;
+    fsBtn.onclick = () => {
+      const wrapper = document.querySelector('.video-wrapper');
+      if (document.fullscreenElement) {
+        document.exitFullscreen();
+      } else if (wrapper.requestFullscreen) {
+        wrapper.requestFullscreen();
+      }
+    };
 
-fsBtn.onclick = () => {
-  const wrapper = document.querySelector('.video-wrapper');
-  document.fullscreenElement
-    ? document.exitFullscreen()
-    : wrapper.requestFullscreen();
-};
+    video.addEventListener('timeupdate', () => {
+      if (!video.duration) return;
+      const percent = (video.currentTime / video.duration) * 100;
+      proFill.style.width = percent + '%';
+      updateTimeLabel();
+    });
 
-video.addEventListener('timeupdate', () => {
-  if (!video.duration) return;
-  const percent = (video.currentTime / video.duration) * 100;
-  proFill.style.width = percent + '%';
-});
+    video.addEventListener('play', () => {
+      ppBtn.textContent = '⏸';
+    });
 
-video.addEventListener('play', () => {
-  ppBtn.textContent = '⏸';
-});
+    video.addEventListener('pause', () => {
+      ppBtn.textContent = '▶';
+    });
 
-video.addEventListener('pause', () => {
-  ppBtn.textContent = '▶';
-});
+    function formatTime(seconds) {
+      if (isNaN(seconds) || !isFinite(seconds)) return '00:00';
+      const s = Math.floor(seconds % 60);
+      const m = Math.floor((seconds / 60) % 60);
+      const h = Math.floor(seconds / 3600);
+      const pad = (n) => n.toString().padStart(2, '0');
+      if (h > 0) {
+        return `${h}:${pad(m)}:${pad(s)}`;
+      }
+      return `${pad(m)}:${pad(s)}`;
+    }
 
-proBar.addEventListener('click', (e) => {
-  const rect = proBar.getBoundingClientRect();
-  const pos = (e.clientX - rect.left) / rect.width;
-  video.currentTime = pos * video.duration;
-});
+    function updateTimeLabel() {
+      if (!timeLabel) return;
+      const current = formatTime(video.currentTime || 0);
+      const total = formatTime(video.duration || 0);
+      timeLabel.textContent = `${current} / ${total}`;
+    }
 
+    // Netflix-style tooltip behaviour
+    proBar.addEventListener('mousemove', (e) => {
+      if (!video.duration) return;
+      const rect = proBar.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      const seconds = pos * video.duration;
+      proTooltip.textContent = formatTime(seconds);
+      proTooltip.style.left = `${pos * 100}%`;
+      proTooltip.classList.add('visible');
+    });
+
+    proBar.addEventListener('mouseleave', () => {
+      proTooltip.classList.remove('visible');
+    });
+
+    proBar.addEventListener('click', (e) => {
+      const rect = proBar.getBoundingClientRect();
+      const pos = (e.clientX - rect.left) / rect.width;
+      if (video.duration) {
+        video.currentTime = pos * video.duration;
+      }
+    });
+
+    // Subtitle toggle
+    if (subToggleBtn) {
+      subToggleBtn.addEventListener('click', () => {
+        if (!video.textTracks || video.textTracks.length === 0) return;
+        const anyShowing = Array.from(video.textTracks).some(t => t.mode === 'showing');
+        const nextMode = anyShowing ? 'disabled' : 'showing';
+        for (let i = 0; i < video.textTracks.length; i++) {
+          video.textTracks[i].mode = nextMode;
+        }
+        subToggleBtn.dataset.state = nextMode === 'showing' ? 'on' : 'off';
+        subToggleBtn.textContent = nextMode === 'showing' ? 'Subs: On' : 'Subs: Off';
+      });
+    }
+
+    // Quality selector change (κανονικό HLS)
+    if (qualitySelect) {
+      qualitySelect.addEventListener('change', () => {
+        if (!hlsInstance) return;
+        const value = qualitySelect.value;
+        if (value === '-1') {
+          hlsInstance.currentLevel = -1; // auto
+          hlsInstance.autoLevelEnabled = true;
+          infoRes.textContent = 'Resolution: auto';
+        } else {
+          const levelIndex = parseInt(value, 10);
+          if (!isNaN(levelIndex)) {
+            hlsInstance.currentLevel = levelIndex;
+            hlsInstance.autoLevelEnabled = false;
+            const level = hlsInstance.levels && hlsInstance.levels[levelIndex];
+            if (level && level.height) {
+              infoRes.textContent = `Resolution: ${level.height}p`;
+            }
+          }
+        }
+      });
+    }
+
+    // Remote / TV optimized keys (native timing, no sync hacks)
+    window.addEventListener('keydown', (e) => {
+      const activeTag = document.activeElement && document.activeElement.tagName.toLowerCase();
+      if (activeTag === 'input' || activeTag === 'textarea') return;
+
+      switch (e.key) {
+        case ' ':
+        case 'Enter':
+        case 'MediaPlayPause':
+          e.preventDefault();
+          video.paused ? video.play() : video.pause();
+          break;
+        case 'ArrowLeft':
+        case 'MediaRewind':
+          e.preventDefault();
+          video.currentTime = Math.max(0, (video.currentTime || 0) - 10);
+          break;
+        case 'ArrowRight':
+        case 'MediaFastForward':
+          e.preventDefault();
+          if (video.duration) {
+            video.currentTime = Math.min(video.duration, (video.currentTime || 0) + 10);
+          }
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          video.volume = Math.min(1, (video.volume || 0) + 0.05);
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          video.volume = Math.max(0, (video.volume || 0) - 0.05);
+          break;
+        case 'KeyF':
+          e.preventDefault();
+          fsBtn.click();
+          break;
+        case 'KeyM':
+          e.preventDefault();
+          muteBtn.click();
+          break;
+        default:
+          break;
+      }
+    });
   </script>
 </body>
 </html>
