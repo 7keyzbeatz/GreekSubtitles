@@ -1,102 +1,225 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Chromecast VOD Receiver + Subs</title>
+    <title>Professional Cast Player</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
 
     <style>
-        body {
-            background-color: black;
+        html, body {
+            background: black;
             margin: 0;
             padding: 0;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
+            font-family: Arial, sans-serif;
         }
 
-        #debug {
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.7);
-            color: #00ffcc;
-            font-family: monospace;
+        video {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            background: black;
+        }
+
+        .overlay {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 999;
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .left, .right {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        button, select {
+            background: rgba(20,20,20,0.9);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.2);
+            padding: 10px 14px;
+            border-radius: 10px;
             font-size: 14px;
-            padding: 12px 16px;
-            border-radius: 12px;
-            z-index: 9999;
-            max-width: 90%;
-            white-space: pre-wrap;
-            word-break: break-all;
+            cursor: pointer;
+        }
+
+        button:hover, select:hover {
+            background: rgba(50,50,50,1);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #restartBtn {
+            background: #e50914;
         }
     </style>
 </head>
 <body>
 
-<div id="debug">Waiting for Cast data...</div>
+<video id="video"></video>
+
+<div id="ui" class="overlay hidden">
+    <div class="controls">
+        <div class="left">
+            <button id="backBtn">⏪ 10s</button>
+            <button id="playPauseBtn">⏸</button>
+            <button id="forwardBtn">10s ⏩</button>
+        </div>
+
+        <div class="right">
+            <button id="subsBtn">SUBS: ON</button>
+
+            <select id="qualitySelect">
+                <option value="auto">AUTO</option>
+                <option value="low">LOW</option>
+                <option value="mid">MEDIUM</option>
+                <option value="high">HIGH</option>
+            </select>
+
+            <button id="restartBtn" class="hidden">🔁 RESTART</button>
+        </div>
+    </div>
+</div>
 
 <script>
     const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
-    const debug = document.getElementById('debug');
 
-    function log(msg) {
-        debug.textContent = msg;
-    }
+    const video = document.getElementById('video');
+    const ui = document.getElementById('ui');
+
+    const playPauseBtn = document.getElementById('playPauseBtn');
+    const backBtn = document.getElementById('backBtn');
+    const forwardBtn = document.getElementById('forwardBtn');
+    const subsBtn = document.getElementById('subsBtn');
+    const qualitySelect = document.getElementById('qualitySelect');
+    const restartBtn = document.getElementById('restartBtn');
 
     const context = cast.framework.CastReceiverContext.getInstance();
     const playerManager = context.getPlayerManager();
 
-    log('Receiver started. Waiting for video + subtitles...');
+    let currentVideoUrl = '';
+    let currentSubUrl = '';
+    let subsEnabled = true;
+
+    function showUI() {
+        ui.classList.remove('hidden');
+    }
+
+    function hideRestart() {
+        restartBtn.classList.add('hidden');
+    }
+
+    function showRestart() {
+        restartBtn.classList.remove('hidden');
+    }
 
     context.addCustomMessageListener(NAMESPACE, function (event) {
         try {
-            const data = typeof event.data === 'string'
-                ? JSON.parse(event.data)
-                : event.data;
+            const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
 
             const videoUrl = data.url || '';
-            const subUrl   = data.subUrl || '';
+            const subUrl = data.subUrl || '';
 
-            log('VIDEO:\n' + videoUrl + '\n\nSUB:\n' + subUrl);
+            if (!videoUrl) return;
 
-            if (!videoUrl || !videoUrl.includes('.m3u8')) {
-                log('ERROR: Invalid video URL');
-                return;
-            }
+            currentVideoUrl = videoUrl;
+            currentSubUrl = subUrl;
+            subsEnabled = true;
 
             const mediaInfo = new cast.framework.messages.MediaInformation(videoUrl);
             mediaInfo.contentType = 'application/x-mpegURL';
             mediaInfo.streamType = cast.framework.messages.StreamType.BUFFERED;
 
-            // ====== ΥΠΟΤΙΤΛΟΙ ======
             if (subUrl) {
-                const textTrack = new cast.framework.messages.Track(1, cast.framework.messages.TrackType.TEXT);
-                textTrack.trackContentId = subUrl;
-                textTrack.trackContentType = 'text/vtt';   // VTT format
-                textTrack.subtype = cast.framework.messages.TextTrackType.SUBTITLES;
-                textTrack.name = 'Greek Subtitles';
-                textTrack.language = 'el';
-
-                mediaInfo.tracks = [textTrack];
-                mediaInfo.textTrackStyle = new cast.framework.messages.TextTrackStyle();
+                const track = new cast.framework.messages.Track(1, cast.framework.messages.TrackType.TEXT);
+                track.trackContentId = subUrl;
+                track.trackContentType = 'text/vtt';
+                track.subtype = cast.framework.messages.TextTrackType.SUBTITLES;
+                track.name = 'Subtitles';
+                track.language = 'el';
+                mediaInfo.tracks = [track];
             }
 
             const request = new cast.framework.messages.LoadRequestData();
             request.media = mediaInfo;
             request.autoplay = true;
-
-            // Ενεργοποίηση subtitle
-            if (subUrl) {
-                request.activeTrackIds = [1];
-            }
+            request.activeTrackIds = subUrl ? [1] : [];
 
             playerManager.load(request);
 
-            log('Playback with subtitles started ✅');
+            showUI();
+            hideRestart();
 
-        } catch (e) {
-            log('ERROR: ' + e.message);
+        } catch (e) {}
+    });
+
+    // ==== CONTROLS ====
+
+    playPauseBtn.onclick = () => {
+        if (video.paused) {
+            video.play();
+            playPauseBtn.textContent = '⏸';
+        } else {
+            video.pause();
+            playPauseBtn.textContent = '▶';
         }
+    };
+
+    backBtn.onclick = () => {
+        video.currentTime = Math.max(video.currentTime - 10, 0);
+    };
+
+    forwardBtn.onclick = () => {
+        video.currentTime += 10;
+    };
+
+    subsBtn.onclick = () => {
+        subsEnabled = !subsEnabled;
+        subsBtn.textContent = subsEnabled ? 'SUBS: ON' : 'SUBS: OFF';
+
+        const active = subsEnabled ? [1] : [];
+
+        playerManager.setActiveTrackIds(active);
+    };
+
+    qualitySelect.onchange = () => {
+        const q = qualitySelect.value;
+
+        if (q === 'auto') playerManager.setActiveTrackIds([]);
+        if (q === 'low') playerManager.setActiveAudioTrackIds([0]);
+        if (q === 'mid') playerManager.setActiveAudioTrackIds([1]);
+        if (q === 'high') playerManager.setActiveAudioTrackIds([2]);
+    };
+
+    restartBtn.onclick = () => {
+        video.currentTime = 0;
+        video.play();
+        hideRestart();
+    };
+
+    video.addEventListener('ended', () => {
+        showRestart();
     });
 
     context.start();
