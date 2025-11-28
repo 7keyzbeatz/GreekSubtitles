@@ -2,9 +2,12 @@
 <html lang="el">
 <head>
   <meta charset="UTF-8">
-  <title>Fullscreen HLS Player</title>
+  <title>Fullscreen HLS Cast Receiver</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
+  <!-- Chromecast CAF Receiver SDK -->
+  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  <!-- hls.js -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.8/dist/hls.min.js"></script>
 
   <style>
@@ -105,6 +108,17 @@
       display: flex;
       gap: 10px;
     }
+
+    .status {
+      position: absolute;
+      left: 15px;
+      bottom: 15px;
+      padding: 6px 10px;
+      background: rgba(0,0,0,.6);
+      color: #aaa;
+      font-size: 11px;
+      border-radius: 10px;
+    }
   </style>
 </head>
 <body>
@@ -134,101 +148,223 @@
 
   <div class="info">
     <span id="res">Resolution: auto</span>
-    <span id="tech">HTML5</span>
+    <span id="tech">Idle</span>
   </div>
+
+  <div class="status" id="status">Waiting for cast...</div>
 </div>
 
 <script>
 /* ===============================
-   ΒΑΛΕ ΤΑ LINKS ΣΟΥ ΕΔΩ
+   ΒΑΣΙΚΑ ELEMENTS
 ================================== */
-const VIDEO_URL = "https://icy-boat-356c.10011-8fd.workers.dev/hailmist36.pro/file2/OPPyPnl4Slab+HjmeyZo4u1zAX2Dhzg8B18K1n7MUr3jnSWsiGlLFwO8GMyo0ADgxnWyd99p28pERmEvHnueH0Kr3Vi5cB+YopkKZer3DljXgq1JhdJRfAlnzgwDzgT+V5Va5HhoK~FUPR6WLXxrejqDHDxAymrefPTv1Yla4Ac=/cGxheWxpc3QubTN1OA==.m3u8";
-const SUB_URL   = "https://gist.githubusercontent.com/movieflixgr/478cc773cae72d60f3e9edd5da3442b1/raw/f10c660b985e28a077f53a5cfed609e1f186149a/%5B_Thanksgiving%202023%201080p%20WEBRip%201400MB%20DD5%201%20x264-GalaxyRG_%5D.vtt/download?filename=subs.vtt";
-const SUB_LANG  = "Greek";
+const video    = document.getElementById("video");
+const playBtn  = document.getElementById("play");
+const rwBtn    = document.getElementById("rewind");
+const fwBtn    = document.getElementById("forward");
+const muteBtn  = document.getElementById("mute");
+const subsBtn  = document.getElementById("subs");
 
-/* =============================== */
+const bar      = document.getElementById("bar");
+const fill     = document.getElementById("fill");
+const quality  = document.getElementById("quality");
 
-const video = document.getElementById("video");
-const playBtn = document.getElementById("play");
-const rwBtn = document.getElementById("rewind");
-const fwBtn = document.getElementById("forward");
-const muteBtn = document.getElementById("mute");
-const subsBtn = document.getElementById("subs");
-
-const bar = document.getElementById("bar");
-const fill = document.getElementById("fill");
-const quality = document.getElementById("quality");
-
-const res = document.getElementById("res");
-const tech = document.getElementById("tech");
+const resEl    = document.getElementById("res");
+const techEl   = document.getElementById("tech");
+const statusEl = document.getElementById("status");
 
 let hls = null;
+let currentSubTrack = null;
 
-function enterFullscreen() {
-  document.documentElement.requestFullscreen?.();
+/* ===============================
+   CAST RECEIVER SETUP
+================================== */
+const context       = cast.framework.CastReceiverContext.getInstance();
+const playerManager = context.getPlayerManager();
+
+// ΜΗΝ κάνει idle timeout ο receiver
+context.setInactivityTimeout(0);
+
+/**
+ * Καλείται όταν ο sender κάνει LOAD (RemoteMediaClient.load(getMediaInfo()))
+ * εδώ παίρνουμε:
+ *  - media.contentId  => video URL (από VideoCast)
+ *  - media.tracks[]   => subtitles (SubtitlesServerUrl)
+ */
+playerManager.setMessageInterceptor(
+  cast.framework.messages.MessageType.LOAD,
+  (loadRequestData) => {
+    const media = loadRequestData.media;
+    if (!media) return null;
+
+    const videoUrl = media.contentId;
+    let subtitleUrl = null;
+    let subtitleLang = "Subtitles";
+
+    if (Array.isArray(media.tracks)) {
+      const textTrack =
+        media.tracks.find(t => t.type === "TEXT" || t.type === 1) || null;
+
+      if (textTrack) {
+        // Ανάλογα με την έκδοση SDK, το URL είναι είτε trackContentId είτε contentId
+        subtitleUrl  = textTrack.trackContentId || textTrack.contentId || null;
+        subtitleLang = textTrack.language || textTrack.name || "Subtitles";
+      }
+    }
+
+    statusEl.textContent = "Loading from sender...";
+    techEl.textContent   = "Preparing";
+
+    loadPlayer(videoUrl, subtitleUrl, subtitleLang);
+
+    // Επιστρέφουμε null για να ΜΗΝ κάνει auto-load ο default CAF player
+    return null;
+  }
+);
+
+// Συνδέουμε Play/Pause/Seek από τον sender στο δικό μας <video>
+playerManager.addEventListener(
+  cast.framework.events.EventType.PLAY,
+  () => {
+    video.play().catch(() => {});
+  }
+);
+
+playerManager.addEventListener(
+  cast.framework.events.EventType.PAUSE,
+  () => {
+    video.pause();
+  }
+);
+
+playerManager.addEventListener(
+  cast.framework.events.EventType.SEEKING,
+  (e) => {
+    if (!isNaN(e.currentTime)) {
+      video.currentTime = e.currentTime;
+    }
+  }
+);
+
+// Εκκίνηση receiver
+context.start();
+
+/* ===============================
+   PLAYER LOADER (ΧΩΡΙΣ HARDCODED URLs)
+================================== */
+function destroyHls() {
+  if (hls) {
+    hls.destroy();
+    hls = null;
+  }
 }
 
-function loadPlayer() {
-  if (VIDEO_URL.includes(".m3u8") && Hls.isSupported()) {
-    tech.textContent = "hls.js";
-    hls = new Hls();
-    hls.loadSource(VIDEO_URL);
+function clearSubtitles() {
+  const tracks = video.querySelectorAll("track");
+  tracks.forEach(t => t.remove());
+  currentSubTrack = null;
+  subsBtn.disabled = true;
+}
+
+function attachSubtitles(subUrl, subLang) {
+  clearSubtitles();
+  if (!subUrl) return;
+
+  const track = document.createElement("track");
+  track.kind = "subtitles";
+  track.label = subLang || "Subtitles";
+  track.srclang = "el";
+  track.src = subUrl;
+  track.default = true;
+  video.appendChild(track);
+
+  if (video.textTracks && video.textTracks.length > 0) {
+    video.textTracks[0].mode = "showing";
+  }
+
+  subsBtn.disabled = false;
+  currentSubTrack = track;
+}
+
+function loadPlayer(videoUrl, subUrl, subLang) {
+  destroyHls();
+  clearSubtitles();
+
+  if (!videoUrl) {
+    statusEl.textContent = "No media URL received";
+    techEl.textContent = "Error";
+    return;
+  }
+
+  statusEl.textContent = "Loading...";
+  techEl.textContent = "HTML5";
+
+  if (videoUrl.includes(".m3u8") && Hls.isSupported()) {
+    techEl.textContent = "hls.js";
+    hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: true,
+      backBufferLength: 90
+    });
+
+    hls.loadSource(videoUrl);
     hls.attachMedia(video);
 
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      video.play();
-      enterFullscreen();
+      statusEl.textContent = "Playing";
+      video.play().catch(() => {});
+      attachSubtitles(subUrl, subLang);
     });
 
+    // Γεμίζουμε ποιότητες με αντιστροφή (ώστε να ταιριάζουν με τα indexes)
     hls.on(Hls.Events.MANIFEST_LOADED, (_, d) => {
-  quality.innerHTML = '<option value="-1">Auto</option>';
+      quality.innerHTML = '<option value="-1">Auto</option>';
 
-  // Δημιουργία reversed mapping
-  const reversed = d.levels
-    .map((lvl, i) => ({ lvl, i }))
-    .reverse();
+      const reversed = d.levels
+        .map((lvl, i) => ({ lvl, i }))
+        .reverse();
 
-  reversed.forEach(item => {
-    const opt = document.createElement("option");
-    opt.value = item.i; // πραγματικό index
-    opt.textContent = item.lvl.height
-      ? item.lvl.height + "p"
-      : "Level";
-    quality.appendChild(opt);
-  });
+      reversed.forEach(item => {
+        const opt = document.createElement("option");
+        opt.value = item.i; // πραγματικό HLS index
+        opt.textContent = item.lvl.height
+          ? item.lvl.height + "p"
+          : "Level";
+        quality.appendChild(opt);
+      });
 
-  quality.disabled = false;
-});
+      quality.disabled = false;
+    });
 
     hls.on(Hls.Events.LEVEL_SWITCHED, (_, d) => {
       const level = hls.levels[d.level];
-      res.textContent = level?.height
+      resEl.textContent = level && level.height
         ? "Resolution: " + level.height + "p"
         : "Resolution: auto";
     });
+
   } else {
-    video.src = VIDEO_URL;
-    video.play();
+    video.src = videoUrl;
+    video.play().catch(() => {});
+    statusEl.textContent = "Playing (native)";
+    attachSubtitles(subUrl, subLang);
   }
 
-  if (SUB_URL) {
-    const track = document.createElement("track");
-    track.kind = "subtitles";
-    track.label = SUB_LANG;
-    track.src = SUB_URL;
-    track.srclang = "el";
-    track.default = true;
-    video.appendChild(track);
-    video.textTracks[0].mode = "showing";
-    subsBtn.disabled = false;
-  }
+  // Keep-alive για να μη θεωρηθεί idle
+  setInterval(() => {
+    if (!video.paused && !video.ended) {
+      // Απλό touch στο currentTime ώστε το runtime να μην κοιμηθεί
+      video.currentTime = video.currentTime;
+    }
+  }, 15000);
 }
 
-/* ------- Controls ------- */
-
+/* ===============================
+   LOCAL CONTROLS (REMOTE + TV)
+================================== */
 playBtn.onclick = () => video.paused ? video.play() : video.pause();
-rwBtn.onclick = () => video.currentTime -= 10;
-fwBtn.onclick = () => video.currentTime += 10;
+rwBtn.onclick   = () => { video.currentTime = Math.max(0, video.currentTime - 10); };
+fwBtn.onclick   = () => { video.currentTime = video.currentTime + 10; };
 
 muteBtn.onclick = () => {
   video.muted = !video.muted;
@@ -236,6 +372,7 @@ muteBtn.onclick = () => {
 };
 
 subsBtn.onclick = () => {
+  if (!video.textTracks || video.textTracks.length === 0) return;
   const t = video.textTracks[0];
   t.mode = t.mode === "showing" ? "disabled" : "showing";
 };
@@ -243,7 +380,11 @@ subsBtn.onclick = () => {
 quality.onchange = () => {
   if (!hls) return;
   const v = quality.value;
-  hls.currentLevel = v === "-1" ? -1 : parseInt(v);
+  if (v === "-1") {
+    hls.currentLevel = -1;
+  } else {
+    hls.currentLevel = parseInt(v);
+  }
 };
 
 video.addEventListener("timeupdate", () => {
@@ -254,11 +395,14 @@ video.addEventListener("timeupdate", () => {
 bar.onclick = (e) => {
   const r = bar.getBoundingClientRect();
   const p = (e.clientX - r.left) / r.width;
-  video.currentTime = p * video.duration;
+  if (video.duration) {
+    video.currentTime = p * video.duration;
+  }
 };
 
-window.addEventListener("load", loadPlayer);
-
+/* ===============================
+   Android TV / Remote friendly select
+================================== */
 quality.setAttribute("tabindex", "0");
 
 quality.addEventListener("focus", () => {
@@ -267,25 +411,21 @@ quality.addEventListener("focus", () => {
 
 window.addEventListener("keydown", (e) => {
   const isTV = /TV|BRAVIA|AFT|Android TV/i.test(navigator.userAgent);
-
   if (!isTV) return;
 
-  // Όταν πατάς OK πάνω στο quality menu
   if (
     (e.key === "Enter" || e.key === "OK") &&
     document.activeElement === quality
   ) {
     e.preventDefault();
-    quality.click();     // Trick για Android TV
-    quality.size = quality.options.length; // ανοίγει σαν λίστα
+    quality.click();
+    quality.size = quality.options.length;
   }
 
-  // Όταν επιλέγεις τιμή
   if (e.key === "Escape" || e.key === "Backspace") {
     quality.size = 0;
   }
 });
-  
 </script>
 
 </body>
