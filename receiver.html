@@ -1,66 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cast Custom Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- CAF Receiver SDK -->
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+
+    <style>
+        body {
+            background-color: #121212;
+            color: #e0e0e0;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #00bcd4;
+            font-size: 28px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .data-viewer {
+            background: #1e1e1e;
+            padding: 20px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            font-size: 15px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .label {
+            color: #81c784;
+            font-weight: bold;
+            display: block;
+            margin-top: 10px;
+        }
+        .value {
+            color: #ffffff;
+            font-size: 14px;
+        }
+        video {
+            width: 100%;
+            max-width: 900px;
+            background: black;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+
+<h1>🎬 Chromecast Receiver - HLS Player</h1>
+
+<div id="dataViewer" class="data-viewer">
+    Waiting for messages...
+</div>
+
+<video id="videoElement" controls autoplay></video>
+
 <script>
     const dataViewer = document.getElementById('dataViewer');
+    const video = document.getElementById('videoElement');
+
     const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
 
     function displayData(key, value, clear = false) {
         if (clear) dataViewer.innerHTML = '';
 
-        const entry = document.createElement('div');
-        const keySpan = document.createElement('span');
-        keySpan.classList.add('label');
-        keySpan.textContent = key + ':';
+        const row = document.createElement('div');
 
-        const valueSpan = document.createElement('span');
-        valueSpan.classList.add('value');
-        valueSpan.textContent = value;
+        const k = document.createElement('span');
+        k.className = 'label';
+        k.textContent = key + ':';
 
-        entry.appendChild(keySpan);
-        entry.appendChild(valueSpan);
-        dataViewer.appendChild(entry);
+        const v = document.createElement('span');
+        v.className = 'value';
+        v.textContent = value;
+
+        row.appendChild(k);
+        row.appendChild(v);
+        dataViewer.appendChild(row);
     }
 
-    // CAF Receiver
     const context = cast.framework.CastReceiverContext.getInstance();
-    const playerManager = context.getPlayerManager();
 
-    displayData('STATUS', 'CAF Receiver initialized. Waiting for messages...', true);
+    displayData('STATUS', 'Receiver loaded. Waiting for video...', true);
 
-    // Ακούμε custom μηνύματα
     context.addCustomMessageListener(NAMESPACE, function (event) {
-        displayData('STATUS', 'Custom Message Received!', true);
+        displayData('STATUS', 'Message received', true);
 
         try {
             const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-
             const videoUrl = data.url || '';
 
-            displayData('MESSAGE TYPE', data.type || 'N/A');
-            displayData('VIDEO URL (DIRECT)', videoUrl);
-            displayData('SUB URL (DIRECT)', data.subUrl || 'NONE');
+            displayData('TYPE', data.type || 'N/A');
+            displayData('VIDEO URL', videoUrl);
+            displayData('SUB URL', data.subUrl || 'none');
 
-            if (!videoUrl || !videoUrl.includes('.m3u8')) {
-                displayData('ERROR', 'Το URL δεν είναι m3u8', false);
+            if (!videoUrl) {
+                displayData('ERROR', 'Empty URL');
                 return;
             }
 
-            displayData('PLAYER', 'Ξεκινάει η αναπαραγωγή...', false);
+            video.src = videoUrl;
+            video.load();
+            video.play();
 
-            // Δημιουργία Media Info για HLS
-            const mediaInfo = new cast.framework.messages.MediaInformation(videoUrl);
-            mediaInfo.contentType = 'application/x-mpegURL';
-            mediaInfo.streamType = cast.framework.messages.StreamType.BUFFERED;
-
-            const request = new cast.framework.messages.LoadRequestData();
-            request.media = mediaInfo;
-            request.autoplay = true;
-
-            // Παίξε το video
-            playerManager.load(request);
+            displayData('PLAYER', 'Playback started');
 
         } catch (e) {
-            displayData('ERROR', 'Failed to parse JSON message: ' + e.message, true);
+            displayData('ERROR', e.message, true);
         }
     });
 
     context.start();
 </script>
+
+</body>
+</html>
