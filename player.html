@@ -108,6 +108,15 @@ let hls = null;
 let dash = null;
 let hudTimer = null;
 
+let fatalCount = 0;
+let lastTime = 0;
+let currentUrl = "";
+let currentSub = "";
+
+function log(...args){
+  console.log("[GRMF]", ...args);
+}
+
 function fmt(t){
   if(!isFinite(t)) return "0:00";
   t = Math.floor(t);
@@ -132,6 +141,7 @@ function reset(){
   v.removeAttribute("src");
   v.load();
   v.querySelectorAll("track").forEach(t=>t.remove());
+  fatalCount = 0;
 }
 
 function addSubs(url){
@@ -153,12 +163,34 @@ function addSubs(url){
 function loadStream(url, subUrl){
   if(!url) return;
   reset();
+
+  currentUrl = url;
+  currentSub = subUrl;
+
   const low = url.toLowerCase();
+  log("Loading stream:", url);
 
   if(low.endsWith(".m3u8") && window.Hls && Hls.isSupported()){
     hls = new Hls();
+
+    hls.on(Hls.Events.ERROR,(e,data)=>{
+      log("HLS ERROR:", data.type, "fatal="+data.fatal);
+
+      if(data.fatal){
+        fatalCount++;
+        if(fatalCount >= 3){
+          skipBrokenSegment();
+        }else{
+          try{ hls.recoverMediaError(); }catch(err){}
+        }
+      } else {
+        fatalCount = 0;
+      }
+    });
+
     hls.loadSource(url);
     hls.attachMedia(v);
+
     hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
       addSubs(subUrl);
       v.play().catch(()=>{});
@@ -179,6 +211,28 @@ function loadStream(url, subUrl){
   }
 }
 
+function skipBrokenSegment(){
+  fatalCount = 0;
+
+  const base = (v.currentTime || lastTime || 0);
+  const target = base + 30;
+
+  log("🔥 SKIP MODE → jump to", target);
+
+  try{
+    v.currentTime = target;
+  }catch(e){
+    // hard reload fallback
+    const src = v.currentSrc || currentUrl;
+    v.src = src;
+    v.load();
+    v.onloadedmetadata = ()=>{
+      v.currentTime = target;
+      v.play().catch(()=>{});
+    };
+  }
+}
+
 /* time update */
 v.addEventListener("timeupdate",()=>{
   if(!isFinite(v.duration)) return;
@@ -186,9 +240,31 @@ v.addEventListener("timeupdate",()=>{
   fill.style.width = p+"%";
   cur.textContent = fmt(v.currentTime);
   dur.textContent = fmt(v.duration);
+  lastTime = v.currentTime;
 });
 
-/* Seeking */
+/* freeze watchdog */
+setInterval(()=>{
+  if(!v.src || !v.duration) return;
+
+  if(!v.paused && Math.abs(v.currentTime - lastTime) < 0.01){
+    log("⚠️ Freeze detected → soft reload");
+
+    const src = v.currentSrc || currentUrl;
+    const t = v.currentTime;
+
+    v.src = src;
+    v.load();
+    v.onloadedmetadata = ()=>{
+      v.currentTime = t;
+      v.play().catch(()=>{});
+    };
+  }
+
+  lastTime = v.currentTime;
+}, 4000);
+
+/* Manual seek */
 function seek(delta){
   if(!isFinite(v.duration)) return;
   let t = v.currentTime + delta;
@@ -203,11 +279,13 @@ function seek(delta){
   showHud();
 }
 
+/* Play/Pause */
 function togglePlay(){
   v.paused ? v.play().catch(()=>{}) : v.pause();
   showHud();
 }
 
+/* Stop */
 function stopVideo(){
   v.pause();
   v.currentTime=0;
@@ -219,9 +297,9 @@ function stopVideo(){
 /* Remote input */
 function remote(key){
   showHud();
+  log("REMOTE:", key);
 
   switch(key){
-
     case "ArrowLeft":
     case "MediaPreviousTrack":
     case "MediaTrackPrevious":
@@ -249,8 +327,8 @@ function remote(key){
 }
 
 /* Messages from receiver */
-window.addEventListener("message",e=>{
-  const d = e.data || {};
+window.addEventListener("message",(e)=>{
+  const d = e.data||{};
   if(d.type==="LOAD_STREAM"){
     loadStream(d.url, d.subUrl);
   }
@@ -258,42 +336,9 @@ window.addEventListener("message",e=>{
     remote(d.key);
   }
 });
-  
-/* debug with keyboard in browser */
-document.addEventListener("keydown",e=>remote(e.key));
 
-// 1. Πες στον Chromecast ότι υπάρχει πάντα "κάτι" ενεργό
-setInterval(()=>{
-  try{
-    if(v && v.src){
-      // fake activity ping
-      v.play().catch(()=>{});
-    }
-  }catch(e){}
-}, 5000);
-
-// 2. Αν παγώσει τελείως το video, ξαναφόρτωσέ το
-let lastTime = 0;
-setInterval(()=>{
-  if(!v || !v.src || !v.duration) return;
-
-  if(!v.paused && v.currentTime === lastTime){
-    console.log("⚠️ Freeze detected — soft reload");
-    const src = v.currentSrc || v.src;
-    const t = v.currentTime;
-
-    v.src = src;
-    v.load();
-
-    v.onloadedmetadata = ()=>{
-      v.currentTime = t;
-      v.play().catch(()=>{});
-    };
-  }
-
-  lastTime = v.currentTime;
-},3000);
-  
+/* debug local keyboard */
+document.addEventListener("keydown",(e)=>remote(e.key));
 </script>
 </body>
 </html>
