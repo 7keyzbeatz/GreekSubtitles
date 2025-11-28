@@ -27,8 +27,16 @@
 
 <script>
 const NAMESPACE = 'urn:x-cast:com.med1anetwork.grmf.testchannel';
+
 const frame = document.getElementById('playerFrame');
 const context = cast.framework.CastReceiverContext.getInstance();
+const playerManager = context.getPlayerManager();
+
+// 🔥 Keep-alive dummy media session
+playerManager.setMessageInterceptor(
+  cast.framework.messages.MessageType.LOAD,
+  (loadRequestData) => loadRequestData
+);
 
 // Receive messages from Android
 context.addCustomMessageListener(NAMESPACE, (event) => {
@@ -47,37 +55,34 @@ context.addCustomMessageListener(NAMESPACE, (event) => {
   } catch (e) {}
 });
 
-// Better remote key forwarding (key + keyCode)
+// Remote forwarding
 document.addEventListener('keydown', (e) => {
-
   let key = e.key;
 
-  // Map keyCodes (for TV remotes)
   switch (e.keyCode) {
     case 415: key = 'MediaPlayPause'; break;
     case 413: key = 'MediaPlay'; break;
     case 19:  key = 'MediaPause'; break;
-
     case 166:
     case 427:
     case 425: key = 'MediaNextTrack'; break;
-
     case 167:
     case 428:
     case 424: key = 'MediaPreviousTrack'; break;
-
     case 33: key = 'ChannelUp'; break;
     case 34: key = 'ChannelDown'; break;
   }
 
   frame.contentWindow.postMessage({
     type: 'REMOTE_KEY',
-    key: key
+    key
   }, '*');
 });
 
-// Never sleep
+// REAL anti-sleep
 context.setInactivityTimeout(0);
+playerManager.setIdleReasonTimeout(0);
+
 context.start();
 </script>
 
